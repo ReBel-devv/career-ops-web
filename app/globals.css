@@ -1,8 +1,15 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+ * Dark is the default theme; light is applied when the OS asks for it.
+ * The `dark:` utility variant therefore follows `prefers-color-scheme`.
+ */
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    @slot;
+  }
 }
 
 @theme inline {
@@ -10,17 +17,205 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* Status tokens — one per canonical state (states.yml). */
+  --color-status-evaluated: var(--status-evaluated);
+  --color-status-applied: var(--status-applied);
+  --color-status-responded: var(--status-responded);
+  --color-status-interview: var(--status-interview);
+  --color-status-offer: var(--status-offer);
+  --color-status-rejected: var(--status-rejected);
+  --color-status-discarded: var(--status-discarded);
+  --color-status-skip: var(--status-skip);
+  --color-status-evaluated-muted: var(--status-evaluated-muted);
+  --color-status-applied-muted: var(--status-applied-muted);
+  --color-status-responded-muted: var(--status-responded-muted);
+  --color-status-interview-muted: var(--status-interview-muted);
+  --color-status-offer-muted: var(--status-offer-muted);
+  --color-status-rejected-muted: var(--status-rejected-muted);
+  --color-status-discarded-muted: var(--status-discarded-muted);
+  --color-status-skip-muted: var(--status-skip-muted);
+
+  /* Score ramp — 3 steps around the 4.0/5 apply threshold. */
+  --color-score-high: var(--score-high);
+  --color-score-mid: var(--score-mid);
+  --color-score-low: var(--score-low);
 }
 
-@media (prefers-color-scheme: dark) {
+@theme {
+  /* 13px base for dense data surfaces (tables, cards, TSV views). */
+  --text-data: 0.8125rem;
+  --text-data--line-height: 1.25rem;
+}
+
+/* ---------------------------------------------------------------------------
+ * Base theme: DARK (default). Monochrome neutral ramp; one restrained accent
+ * (muted blue) reserved for interactive/focus states. Status colors are the
+ * only place color carries data.
+ * ------------------------------------------------------------------------- */
+:root {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.185 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.62 0.15 255);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.235 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.62 0.15 255);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --radius: 0.5rem;
+  --sidebar: oklch(0.17 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.62 0.15 255);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.62 0.15 255);
+
+  /* Status hues — muted, dark-tuned. Keyed to states.yml ids. */
+  --status-evaluated: oklch(0.7 0.03 250);
+  --status-applied: oklch(0.7 0.11 245);
+  --status-responded: oklch(0.74 0.1 195);
+  --status-interview: oklch(0.71 0.12 300);
+  --status-offer: oklch(0.74 0.12 150);
+  --status-rejected: oklch(0.66 0.12 25);
+  --status-discarded: oklch(0.62 0.05 60);
+  --status-skip: oklch(0.55 0.02 260);
+
+  /* Score ramp: high >= 4.0 (apply threshold), mid 3.0–3.9, low < 3.0. */
+  --score-high: oklch(0.74 0.12 150);
+  --score-mid: oklch(0.76 0.1 85);
+  --score-low: oklch(0.66 0.1 25);
+
+  /* Muted companions (subtle fills) — derived, theme-following. */
+  --status-evaluated-muted: color-mix(in oklab, var(--status-evaluated) 14%, transparent);
+  --status-applied-muted: color-mix(in oklab, var(--status-applied) 14%, transparent);
+  --status-responded-muted: color-mix(in oklab, var(--status-responded) 14%, transparent);
+  --status-interview-muted: color-mix(in oklab, var(--status-interview) 14%, transparent);
+  --status-offer-muted: color-mix(in oklab, var(--status-offer) 14%, transparent);
+  --status-rejected-muted: color-mix(in oklab, var(--status-rejected) 14%, transparent);
+  --status-discarded-muted: color-mix(in oklab, var(--status-discarded) 14%, transparent);
+  --status-skip-muted: color-mix(in oklab, var(--status-skip) 14%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+ * Light theme — applied only when the OS prefers it.
+ * ------------------------------------------------------------------------- */
+@media (prefers-color-scheme: light) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.145 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.145 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.145 0 0);
+    --primary: oklch(0.55 0.17 255);
+    --primary-foreground: oklch(0.985 0 0);
+    --secondary: oklch(0.97 0 0);
+    --secondary-foreground: oklch(0.205 0 0);
+    --muted: oklch(0.97 0 0);
+    --muted-foreground: oklch(0.556 0 0);
+    --accent: oklch(0.97 0 0);
+    --accent-foreground: oklch(0.205 0 0);
+    --destructive: oklch(0.577 0.245 27.325);
+    --border: oklch(0.922 0 0);
+    --input: oklch(0.922 0 0);
+    --ring: oklch(0.55 0.17 255);
+    --chart-1: oklch(0.87 0 0);
+    --chart-2: oklch(0.556 0 0);
+    --chart-3: oklch(0.439 0 0);
+    --chart-4: oklch(0.371 0 0);
+    --chart-5: oklch(0.269 0 0);
+    --sidebar: oklch(0.985 0 0);
+    --sidebar-foreground: oklch(0.145 0 0);
+    --sidebar-primary: oklch(0.55 0.17 255);
+    --sidebar-primary-foreground: oklch(0.985 0 0);
+    --sidebar-accent: oklch(0.97 0 0);
+    --sidebar-accent-foreground: oklch(0.205 0 0);
+    --sidebar-border: oklch(0.922 0 0);
+    --sidebar-ring: oklch(0.55 0.17 255);
+
+    --status-evaluated: oklch(0.52 0.03 250);
+    --status-applied: oklch(0.52 0.13 245);
+    --status-responded: oklch(0.55 0.11 195);
+    --status-interview: oklch(0.53 0.14 300);
+    --status-offer: oklch(0.55 0.13 150);
+    --status-rejected: oklch(0.53 0.14 25);
+    --status-discarded: oklch(0.5 0.05 60);
+    --status-skip: oklch(0.6 0.02 260);
+
+    --score-high: oklch(0.55 0.13 150);
+    --score-mid: oklch(0.6 0.12 80);
+    --score-low: oklch(0.53 0.13 25);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    html {
+      color-scheme: light;
+    }
+  }
 }

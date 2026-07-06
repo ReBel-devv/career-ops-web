@@ -30,8 +30,15 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files — .env.local carries the private repo path; only the example is committed
 .env*
+!.env.example
+
+# test fixtures derived from real data, and parser modules copied from the
+# data repo at test time (see tests/setup/copy-fixtures.ts)
+/tests/fixtures/real/
+/tests/fixtures/**/tracker-parse.mjs
+/tests/fixtures/**/tracker-utils.mjs
 
 # vercel
 .vercel

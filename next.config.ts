@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
+import { assertDeployGuard } from "./lib/config/guard";
 
-const nextConfig: NextConfig = {
-  /* config options here */
-};
+// Privacy gate: a Vercel build without DEMO_MODE must fail (plan §5/§7).
+assertDeployGuard(process.env);
+
+const nextConfig: NextConfig = {};
 
 export default nextConfig;
