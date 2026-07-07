@@ -13,15 +13,21 @@ import {
   documentSchema,
   followUpCadenceSchema,
   followUpDataSchema,
+  patternsResultSchema,
+  pipelineItemSchema,
   reportFacetSchema,
   reportSchema,
+  scanRecordSchema,
   type Application,
   type CanonicalState,
   type Document,
   type FollowUpCadence,
   type FollowUpData,
+  type PatternsResult,
+  type PipelineItem,
   type Report,
   type ReportFacet,
+  type ScanRecord,
 } from "@/lib/domain";
 
 /**
@@ -148,6 +154,43 @@ export function useReportFacets() {
     queryFn: async (): Promise<ReportFacet[]> => {
       const json = await fetchJson("/api/report-facets");
       return reportFacetsResponse.parse(json).facets;
+    },
+  });
+}
+
+const analyticsResponse = z.object({ result: patternsResultSchema });
+const pipelineResponse = z.object({ items: z.array(pipelineItemSchema) });
+const scanHistoryResponse = z.object({ records: z.array(scanRecordSchema) });
+
+/** analyze-patterns.mjs result (ok | insufficient) — never recomputed client-side. */
+export function usePatterns() {
+  return useQuery({
+    queryKey: ["patterns"] as const,
+    queryFn: async (): Promise<PatternsResult> => {
+      const json = await fetchJson("/api/analytics");
+      return analyticsResponse.parse(json).result;
+    },
+  });
+}
+
+/** Discovery inbox items (pending + processed), read-only. */
+export function usePipelineItems() {
+  return useQuery({
+    queryKey: ["pipeline"] as const,
+    queryFn: async (): Promise<PipelineItem[]> => {
+      const json = await fetchJson("/api/pipeline");
+      return pipelineResponse.parse(json).items;
+    },
+  });
+}
+
+/** Portal scanner dedup history, read-only. */
+export function useScanHistory() {
+  return useQuery({
+    queryKey: ["scan-history"] as const,
+    queryFn: async (): Promise<ScanRecord[]> => {
+      const json = await fetchJson("/api/scan-history");
+      return scanHistoryResponse.parse(json).records;
     },
   });
 }

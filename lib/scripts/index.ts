@@ -12,6 +12,7 @@ export {
   type FollowupSeedResult,
 } from "./followup-seed";
 export { runFollowupCadence } from "./followup-cadence";
+export { runAnalyzePatterns } from "./analyze-patterns";
 export {
   runTrackerSync,
   trackerSyncOutcomeSchema,

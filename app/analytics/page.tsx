@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
-import { PlaceholderPage } from "@/components/placeholder-page";
+import { AnalyticsView } from "@/components/analytics/analytics-view";
 
 export const metadata: Metadata = { title: "Analytics" };
 
 export default function AnalyticsPage() {
   return (
-    <PlaceholderPage
-      title="Analytics"
-      description="Funnel conversion, score distribution, archetype and ATS-vendor breakdowns — fed by analyze-patterns.mjs."
-      milestone="M5"
-    />
+    <div className="px-4 py-6 md:px-6">
+      <h1 className="mb-4 text-lg font-semibold tracking-tight">Analytics</h1>
+      <AnalyticsView />
+    </div>
   );
 }

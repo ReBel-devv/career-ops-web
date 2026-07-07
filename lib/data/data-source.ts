@@ -6,6 +6,7 @@ import type {
   FollowUpData,
   FollowUpWriteResult,
   LogFollowUpInput,
+  PatternsResult,
   PipelineItem,
   Report,
   ReportFacet,
@@ -45,6 +46,10 @@ export interface DataSource {
   getPipelineItems(): Promise<PipelineItem[]>;
   /** Scanner dedup history. */
   getScanHistory(): Promise<ScanRecord[]>;
+  /** Rejection-pattern analytics from `analyze-patterns.mjs --json` — never
+   * recomputed. Returns the script's own "not enough data" sentinel as a
+   * renderable state. (M5) */
+  getPatterns(): Promise<PatternsResult>;
   /**
    * Write ONE tracker cell (Status or Notes) of an existing row. (M1)
    * Throws `TrackerWriteError` (NOT_FOUND, STALE_ROW, INVALID_STATUS,

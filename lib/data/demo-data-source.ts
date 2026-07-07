@@ -1,5 +1,7 @@
 import {
   applicationSchema,
+  patternsSchema,
+  scanRecordSchema,
   statesFileSchema,
   type Application,
   type CanonicalState,
@@ -11,6 +13,7 @@ import {
   type FollowUpUrgency,
   type FollowUpWriteResult,
   type LogFollowUpInput,
+  type PatternsResult,
   type PipelineItem,
   type Report,
   type ReportFacet,
@@ -25,6 +28,7 @@ import {
   sanitizeNotes,
   TrackerWriteError,
 } from "@/lib/writers";
+import { parsePipeline } from "@/lib/parsers/pipeline";
 import type { DataSource } from "./data-source";
 
 /**
@@ -316,10 +320,121 @@ export class DemoDataSource implements DataSource {
   }
 
   async getPipelineItems(): Promise<PipelineItem[]> {
-    return [];
+    return parsePipeline(DEMO_PIPELINE_MD);
   }
 
   async getScanHistory(): Promise<ScanRecord[]> {
-    return [];
+    return DEMO_SCAN_HISTORY.map((r) => scanRecordSchema.parse(r));
+  }
+
+  /** Static plausible analysis consistent with the demo apps. Minimal for M5;
+   * the full ~30-app anonymized dataset (and a matching richer analysis) is
+   * M7. Parsed through patternsSchema so demo drift fails loudly in tests. */
+  async getPatterns(): Promise<PatternsResult> {
+    return { kind: "ok", patterns: patternsSchema.parse(DEMO_PATTERNS) };
   }
 }
+
+/**
+ * Demo Discovery inbox — same markdown dialect as the real data/pipeline.md,
+ * run through the real parser so demo and FS modes exercise one code path.
+ * All companies invented.
+ */
+const DEMO_PIPELINE_MD = `# Pipeline — Pending URLs
+
+## Pending
+- [ ] https://jobs.example.com/nimbus-labs/design-engineer-motion | Nimbus Labs | Design Engineer (Motion) | Remote EU | ⭐ exact archetype
+- [ ] https://jobs.example.com/vectorline/frontend-platform | Vectorline | Frontend Engineer, Platform | Amsterdam
+- [ ] https://jobs.example.com/quartzworks/ui-engineer-design-system | Quartzworks | UI Engineer, Design System | Paris/remote
+
+## Processed
+- [x] #004 | https://jobs.example.com/helioscope/product-engineer | Helioscope | Product Engineer | 4.1/5 | PDF ✅
+- [x] #006 | https://jobs.example.com/lumen-systems/frontend-ai-tools | Lumen Systems | Frontend Engineer, AI Tools | 3.9/5 | PDF ✅
+- [dup] https://jobs.example.com/helioscope/product-engineer-eu | Helioscope | Product Engineer (EU) | duplicate of #004
+- [skip] Parallax Digital | Creative Developer | SKIP — posting closed before applying
+- [screened] Batch scan: 12 offers screened out (US-only or heavy backend focus), available on request.
+`;
+
+/** Demo scanner history (invented companies, dynamic-free dates). */
+const DEMO_SCAN_HISTORY = [
+  { url: "https://jobs.example.com/nimbus-labs/design-engineer-motion", firstSeen: "2026-06-20", portal: "greenhouse-api", title: "Design Engineer (Motion)", company: "Nimbus Labs", status: "added", location: "Remote EU" },
+  { url: "https://jobs.example.com/vectorline/frontend-platform", firstSeen: "2026-06-20", portal: "ashby-api", title: "Frontend Engineer, Platform", company: "Vectorline", status: "added", location: "Amsterdam, Netherlands" },
+  { url: "https://jobs.example.com/helioscope/product-engineer", firstSeen: "2026-06-08", portal: "lever-api", title: "Product Engineer", company: "Helioscope", status: "added", location: "Remote (EU)" },
+  { url: "https://jobs.example.com/lumen-systems/frontend-ai-tools", firstSeen: "2026-06-14", portal: "greenhouse-api", title: "Frontend Engineer, AI Tools", company: "Lumen Systems", status: "added", location: "Berlin, Germany" },
+  { url: "https://jobs.example.com/quartzworks/ui-engineer-design-system", firstSeen: "2026-06-22", portal: "ashby-api", title: "UI Engineer, Design System", company: "Quartzworks", status: "skipped-title", location: "Paris, France" },
+];
+
+/** Plausible analyze-patterns payload for the 8 demo apps. minSampleForClaim
+ * is 3 here (vs the CLI's 8) so the demo shows both the accented and the
+ * grayed low-n vendor bars. */
+const DEMO_PATTERNS = {
+  metadata: {
+    total: 8,
+    dateRange: { from: "2026-06-02", to: "2026-06-24" },
+    analysisDate: todayISO(),
+    byOutcome: { positive: 3, negative: 1, self_filtered: 2, pending: 2 },
+  },
+  funnel: {
+    evaluated: 1,
+    applied: 1,
+    responded: 1,
+    interview: 1,
+    offer: 1,
+    rejected: 1,
+    discarded: 1,
+    skip: 1,
+  },
+  scoreComparison: {
+    positive: { avg: 4.0, min: 3.5, max: 4.4, count: 3 },
+    negative: { avg: 3.9, min: 3.9, max: 3.9, count: 1 },
+    self_filtered: { avg: 2.65, min: 2.4, max: 2.9, count: 2 },
+    pending: { avg: 3.5, min: 3.2, max: 3.8, count: 2 },
+  },
+  archetypeBreakdown: [
+    { archetype: "Design Engineer", total: 3, positive: 2, negative: 0, self_filtered: 0, pending: 1, conversionRate: 67 },
+    { archetype: "Frontend Engineer", total: 3, positive: 0, negative: 1, self_filtered: 1, pending: 1, conversionRate: 0 },
+    { archetype: "Product Engineer", total: 2, positive: 1, negative: 0, self_filtered: 1, pending: 0, conversionRate: 50 },
+  ],
+  blockerAnalysis: [
+    { blocker: "seniority-bar", frequency: 2, percentage: 25 },
+  ],
+  remotePolicy: [
+    { policy: "global remote", total: 4, positive: 2, negative: 0, self_filtered: 1, pending: 1, conversionRate: 50 },
+    { policy: "hybrid/onsite", total: 4, positive: 1, negative: 1, self_filtered: 1, pending: 1, conversionRate: 25 },
+  ],
+  companySizeBreakdown: [
+    { size: "unknown", total: 8, conversionRate: 38 },
+  ],
+  vendorAnalysis: {
+    scope: ["greenhouse", "lever", "ashby", "workday"],
+    minSampleForClaim: 3,
+    submitted: 6,
+    identified: 6,
+    coveragePct: 100,
+    overallAdvanceRate: 50,
+    breakdown: [
+      { vendor: "greenhouse", total: 3, advanced: 2, advanceRate: 67, sharePct: 50, sufficientSample: true },
+      { vendor: "lever", total: 2, advanced: 1, advanceRate: 50, sharePct: 33, sufficientSample: false },
+      { vendor: "ashby", total: 1, advanced: 0, advanceRate: 0, sharePct: 17, sufficientSample: false },
+    ],
+    citation: "Bommasani et al., Algorithmic Monocultures in Hiring, FAccT 2026 (arXiv:2605.27371)",
+  },
+  scoreThreshold: {
+    recommended: 3.5,
+    reasoning: "Lowest score among positive outcomes is 3.5. No applications below this score led to progress.",
+    positiveRange: "3.5 - 4.4",
+  },
+  techStackGaps: [{ skill: "Ruby", frequency: 1 }],
+  recommendations: [
+    {
+      action: "Set minimum score threshold at 3.5/5 before generating PDFs",
+      reasoning: "No positive outcomes below 3.5/5. Scores below this are wasted effort.",
+      impact: "medium",
+    },
+    {
+      action: 'Double down on "Design Engineer" roles (67% conversion rate)',
+      reasoning: "2 of 3 applications in this archetype led to positive outcomes.",
+      impact: "medium",
+    },
+  ],
+};

@@ -4,6 +4,7 @@ export * from "./document";
 export * from "./followup";
 export * from "./outreach";
 export * from "./parse";
+export * from "./patterns";
 export * from "./pipeline";
 export * from "./report";
 export * from "./scan";

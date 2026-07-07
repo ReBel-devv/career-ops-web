@@ -14,6 +14,7 @@ import {
   type FollowUpData,
   type FollowUpWriteResult,
   type LogFollowUpInput,
+  type PatternsResult,
   type PipelineItem,
   type Report,
   type ReportFacet,
@@ -25,8 +26,10 @@ import {
 import { getConfig } from "@/lib/config";
 import { parseReport, reportFacet } from "@/lib/parsers/report";
 import { parseFollowUps } from "@/lib/parsers/follow-ups";
+import { parsePipeline } from "@/lib/parsers/pipeline";
 import { matchDocuments, parsePdfIndex } from "@/lib/parsers/documents";
 import {
+  runAnalyzePatterns,
   runFollowupCadence,
   runFollowupReschedule,
   runFollowupSeed,
@@ -270,9 +273,21 @@ export class FsDataSource implements DataSource {
     return { ok: true, date, kind: "log", num };
   }
 
-  // TODO(M5): parse pipeline.md Pending/Processed sections.
+  /** Discovery inbox — read-only parse of data/pipeline.md (plan §4.4). */
   async getPipelineItems(): Promise<PipelineItem[]> {
-    return [];
+    let content: string;
+    try {
+      content = await fs.readFile(this.resolve("data", "pipeline.md"), "utf8");
+    } catch (error: unknown) {
+      if (isNotFound(error)) return [];
+      throw error;
+    }
+    return parsePipeline(content);
+  }
+
+  /** analyze-patterns.mjs --json, zod-validated (never recomputed). */
+  async getPatterns(): Promise<PatternsResult> {
+    return runAnalyzePatterns(this.repoPath);
   }
 
   /**
