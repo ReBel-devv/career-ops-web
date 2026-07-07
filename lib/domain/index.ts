@@ -7,3 +7,4 @@ export * from "./pipeline";
 export * from "./report";
 export * from "./scan";
 export * from "./states";
+export * from "./update";

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, FileText } from "lucide-react";
+import { StatusSelect } from "@/components/applications/status-select";
 import { ScoreBadge } from "@/components/data/score-badge";
 import { STATUS_BORDER_CLASS, StatusIndicator } from "@/components/data/status-indicator";
 import {
@@ -13,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { Application } from "@/lib/domain";
+import type { Application, CanonicalState } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
 type SortKey = "num" | "date" | "company" | "role" | "score" | "status";
@@ -28,7 +29,18 @@ const SORT_ACCESSORS: Record<SortKey, (app: Application) => string | number> = {
   status: (a) => (a.statusLabel ?? a.statusRaw).toLowerCase(),
 };
 
-export function ApplicationsTable({ applications }: { applications: Application[] }) {
+export function ApplicationsTable({
+  applications,
+  states = [],
+  readOnly = false,
+}: {
+  applications: Application[];
+  /** Canonical states for the inline status editor; empty = render read-only. */
+  states?: CanonicalState[];
+  /** READ_ONLY mode — render the plain indicator, no write affordances. */
+  readOnly?: boolean;
+}) {
+  const editable = !readOnly && states.length > 0;
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -97,10 +109,14 @@ export function ApplicationsTable({ applications }: { applications: Application[
                   <ScoreBadge raw={app.scoreRaw} score={app.score} />
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
-                  <StatusIndicator
-                    group={app.dashboardGroup}
-                    label={app.statusLabel ?? app.statusRaw}
-                  />
+                  {editable ? (
+                    <StatusSelect app={app} states={states} />
+                  ) : (
+                    <StatusIndicator
+                      group={app.dashboardGroup}
+                      label={app.statusLabel ?? app.statusRaw}
+                    />
+                  )}
                 </TableCell>
                 <TableCell className="font-mono tabular-nums whitespace-nowrap text-muted-foreground">
                   {app.date}

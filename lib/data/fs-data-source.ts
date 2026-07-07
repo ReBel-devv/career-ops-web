@@ -1,6 +1,5 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { load as loadYaml } from "js-yaml";
 import {
   applicationSchema,
   buildStatusResolver,
@@ -8,22 +7,28 @@ import {
   parseReportCell,
   parseScoreCell,
   scanRecordSchema,
-  statesFileSchema,
   type Application,
   type CanonicalState,
   type FollowUpData,
   type PipelineItem,
   type Report,
   type ScanRecord,
+  type UpdateApplicationInput,
+  type UpdateApplicationResult,
 } from "@/lib/domain";
+import { getConfig } from "@/lib/config";
+import { runFollowupSeed, runTrackerSync } from "@/lib/scripts";
+import { TrackerWriteError, writeTrackerCell } from "@/lib/writers";
 import type { DataSource } from "./data-source";
+import { readStatesFile } from "./states-file";
 import { loadTrackerParse, type TrackerRow } from "./tracker-module";
 
 /**
- * Reads the real career-ops data repo. Column mapping and row parsing are
- * delegated to the repo's own `tracker-parse.mjs` (never reimplemented);
- * states.yml is parsed at request time; every boundary is zod-validated.
- * Strictly read-only in M0.
+ * Reads (and, since M1, surgically writes) the real career-ops data repo.
+ * Column mapping and row parsing are delegated to the repo's own
+ * `tracker-parse.mjs` (never reimplemented); states.yml is parsed at request
+ * time; every boundary is zod-validated. The write surface is exactly one
+ * tracker cell per call (see lib/writers/tracker-writer.ts).
  */
 export class FsDataSource implements DataSource {
   constructor(private readonly repoPath: string) {}
@@ -33,9 +38,7 @@ export class FsDataSource implements DataSource {
   }
 
   async getStates(): Promise<CanonicalState[]> {
-    const raw = await fs.readFile(this.resolve("templates", "states.yml"), "utf8");
-    const doc: unknown = loadYaml(raw);
-    return statesFileSchema.parse(doc).states;
+    return readStatesFile(this.repoPath);
   }
 
   async getApplications(): Promise<Application[]> {
@@ -94,6 +97,48 @@ export class FsDataSource implements DataSource {
   // TODO(M5): parse pipeline.md Pending/Processed sections.
   async getPipelineItems(): Promise<PipelineItem[]> {
     return [];
+  }
+
+  /**
+   * Surgical single-cell tracker write (plan §4.1). Side effects:
+   * - transition INTO Applied → `followup-seed.mjs <num> --date <today> --json`
+   * - derived `data/applications.db` exists → `tracker.mjs sync`
+   * Both are non-fatal: the cell write has already been verified and
+   * committed; their outcome is reported so the UI can toast it.
+   */
+  async updateApplication(
+    input: UpdateApplicationInput,
+  ): Promise<UpdateApplicationResult> {
+    if (getConfig().readOnly) {
+      throw new TrackerWriteError(
+        "READ_ONLY",
+        "READ_ONLY is set — all mutations are disabled.",
+      );
+    }
+
+    const write = await writeTrackerCell({
+      repoPath: this.repoPath,
+      num: input.num,
+      expected: input.expected,
+      status: input.status,
+      notes: input.notes,
+    });
+
+    const resolveStatus = buildStatusResolver(write.states);
+    const application = applicationSchema.parse(
+      toApplication(write.row, resolveStatus),
+    );
+    const result: UpdateApplicationResult = {
+      application,
+      notesSanitized: write.notesSanitized,
+    };
+
+    if (write.transitionedToApplied) {
+      const today = new Date().toISOString().slice(0, 10);
+      result.followupSeed = await runFollowupSeed(this.repoPath, input.num, today);
+    }
+    result.trackerSync = await runTrackerSync(this.repoPath);
+    return result;
   }
 }
 

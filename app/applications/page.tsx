@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { ApplicationsTable } from "@/components/applications/applications-table";
+import { getConfig } from "@/lib/config";
 import { getDataSource } from "@/lib/data";
-import type { Application } from "@/lib/domain";
+import type { Application, CanonicalState } from "@/lib/domain";
 
 export const metadata: Metadata = { title: "Applications" };
 
@@ -10,9 +11,15 @@ export const dynamic = "force-dynamic";
 
 export default async function ApplicationsPage() {
   let applications: Application[] | null = null;
+  let states: CanonicalState[] = [];
   let error: string | null = null;
+  const config = getConfig();
   try {
-    applications = await getDataSource().getApplications();
+    const source = getDataSource();
+    [applications, states] = await Promise.all([
+      source.getApplications(),
+      source.getStates(),
+    ]);
   } catch (e: unknown) {
     error = e instanceof Error ? e.message : String(e);
   }
@@ -36,7 +43,11 @@ export default async function ApplicationsPage() {
           <p className="mt-1 text-muted-foreground">{error}</p>
         </div>
       ) : (
-        <ApplicationsTable applications={applications ?? []} />
+        <ApplicationsTable
+          applications={applications ?? []}
+          states={states}
+          readOnly={config.readOnly && !config.demoMode}
+        />
       )}
     </div>
   );

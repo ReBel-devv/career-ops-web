@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
+import { Toaster } from "sonner";
 import { NavRail } from "@/components/shell/nav-rail";
 import { StatsHeader } from "@/components/shell/stats-header";
 import { TabBar } from "@/components/shell/tab-bar";
@@ -34,6 +35,7 @@ export default function RootLayout({
           </div>
         </div>
         <TabBar />
+        <Toaster position="bottom-right" richColors closeButton />
       </body>
     </html>
   );

@@ -7,7 +7,14 @@ import {
   type PipelineItem,
   type Report,
   type ScanRecord,
+  type UpdateApplicationInput,
+  type UpdateApplicationResult,
 } from "@/lib/domain";
+import {
+  resolveWritableStatus,
+  sanitizeNotes,
+  TrackerWriteError,
+} from "@/lib/writers";
 import type { DataSource } from "./data-source";
 
 /**
@@ -53,6 +60,14 @@ const DEMO_APPS: DemoApp[] = [
   { num: 8, date: "2026-06-24", company: "Parallax Digital", role: "Creative Developer", score: 2.9, statusId: "discarded", hasPdf: false, notes: "Posting closed before applying." },
 ];
 
+/**
+ * In-memory demo write overrides (Decision 6): the public demo is fully
+ * interactive but stateless — overrides live in this module's memory only,
+ * are keyed by app num, and vanish on server restart / new serverless
+ * instance. Never touches any file.
+ */
+const demoOverrides = new Map<number, { statusId?: string; notes?: string }>();
+
 export class DemoDataSource implements DataSource {
   async getStates(): Promise<CanonicalState[]> {
     return statesFileSchema.parse(DEMO_STATES_FILE).states;
@@ -62,7 +77,10 @@ export class DemoDataSource implements DataSource {
     const states = await this.getStates();
     const byId = new Map(states.map((s) => [s.id, s]));
     return DEMO_APPS.map((app) => {
-      const state = byId.get(app.statusId) ?? null;
+      const override = demoOverrides.get(app.num);
+      const statusId = override?.statusId ?? app.statusId;
+      const notes = override?.notes ?? app.notes;
+      const state = byId.get(statusId) ?? null;
       return applicationSchema.parse({
         num: app.num,
         date: app.date,
@@ -70,16 +88,67 @@ export class DemoDataSource implements DataSource {
         role: app.role,
         scoreRaw: app.score === null ? "N/A" : `${app.score.toFixed(1)}/5`,
         score: app.score,
-        statusRaw: state?.label ?? app.statusId,
+        statusRaw: state?.label ?? statusId,
         statusId: state?.id ?? null,
         statusLabel: state?.label ?? null,
         dashboardGroup: state?.dashboardGroup ?? null,
         hasPdf: app.hasPdf,
         reportPath: null,
-        notes: app.notes,
+        notes,
         location: null,
       });
     });
+  }
+
+  /** Per-instance in-memory write — same validation + error codes as FS mode. */
+  async updateApplication(
+    input: UpdateApplicationInput,
+  ): Promise<UpdateApplicationResult> {
+    const applications = await this.getApplications();
+    const current = applications.find((a) => a.num === input.num);
+    if (!current) {
+      throw new TrackerWriteError(
+        "NOT_FOUND",
+        `Application #${input.num} not found in the demo dataset.`,
+      );
+    }
+    if (
+      current.company !== input.expected.company ||
+      current.role !== input.expected.role
+    ) {
+      throw new TrackerWriteError(
+        "STALE_ROW",
+        `Row #${input.num} changed since it was loaded. Reload and retry.`,
+      );
+    }
+    if (input.status === undefined && input.notes === undefined) {
+      throw new TrackerWriteError(
+        "INVALID_INPUT",
+        "Nothing to write: provide status or notes.",
+      );
+    }
+
+    const states = await this.getStates();
+    const previous = demoOverrides.get(input.num) ?? {};
+    const next = { ...previous };
+    let notesSanitized = false;
+    if (input.status !== undefined) {
+      next.statusId = resolveWritableStatus(input.status, states).id;
+    }
+    if (input.notes !== undefined) {
+      const clean = sanitizeNotes(input.notes);
+      notesSanitized = clean !== input.notes;
+      next.notes = clean;
+    }
+    demoOverrides.set(input.num, next);
+
+    const updated = (await this.getApplications()).find(
+      (a) => a.num === input.num,
+    );
+    if (!updated) {
+      throw new TrackerWriteError("NOT_FOUND", "Demo row vanished mid-write.");
+    }
+    return { application: updated, notesSanitized };
   }
 
   async getReport(_num: number): Promise<Report | null> {

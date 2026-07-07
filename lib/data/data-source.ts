@@ -5,6 +5,8 @@ import type {
   PipelineItem,
   Report,
   ScanRecord,
+  UpdateApplicationInput,
+  UpdateApplicationResult,
 } from "@/lib/domain";
 
 /**
@@ -13,8 +15,9 @@ import type {
  * - `DemoDataSource` — fixture-backed, used when DEMO_MODE=true.
  *
  * All reads are performed at request time (the files are living data).
- * Mutations are deliberately absent in M0 — the writer surface (tracker
- * Status/Notes cells, follow-up appends, outreach.yml) arrives in M1/M4/M6.
+ * The mutation surface (M1) is exactly one tracker cell per call — Status
+ * or Notes — guarded by optimistic concurrency (expected company+role).
+ * Follow-up appends arrive in M4, outreach.yml in M6.
  */
 export interface DataSource {
   /** All tracker rows, in file order (callers sort in memory). */
@@ -29,4 +32,13 @@ export interface DataSource {
   getPipelineItems(): Promise<PipelineItem[]>;
   /** Scanner dedup history. */
   getScanHistory(): Promise<ScanRecord[]>;
+  /**
+   * Write ONE tracker cell (Status or Notes) of an existing row. (M1)
+   * Throws `TrackerWriteError` (NOT_FOUND, STALE_ROW, INVALID_STATUS,
+   * READ_ONLY, LOCK_TIMEOUT, VERIFY_FAILED) — the API route maps codes to
+   * HTTP statuses. Never adds or deletes rows.
+   */
+  updateApplication(
+    input: UpdateApplicationInput,
+  ): Promise<UpdateApplicationResult>;
 }
