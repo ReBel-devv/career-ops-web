@@ -1,0 +1,99 @@
+"use client";
+
+import Link from "next/link";
+import * as React from "react";
+import { forwardRef, type ReactNode } from "react";
+import { AlertTriangle, FileText } from "lucide-react";
+import { ScoreBadge } from "@/components/data/score-badge";
+import { STATUS_BORDER_CLASS } from "@/components/data/status-indicator";
+import type { Application } from "@/lib/domain";
+import { cn } from "@/lib/utils";
+
+/**
+ * Presentational Kanban card. Kept drag-agnostic so it renders identically in
+ * the desktop draggable column, the drag overlay, and the mobile list.
+ *
+ * The `overdue` prop is a clean seam for M4: follow-up cadence isn't wired yet,
+ * so the board never passes it (indicator stays hidden). When M4 computes
+ * overdue follow-ups, pass `overdue` and the indicator lights up — no other
+ * change needed.
+ */
+export interface ApplicationCardProps
+  extends React.HTMLAttributes<HTMLDivElement> {
+  app: Application;
+  /** Slot for the move-menu / drag affordance rendered by the parent. */
+  action?: ReactNode;
+  /** M4 seam — follow-up past its pinned date. */
+  overdue?: boolean;
+  dragging?: boolean;
+}
+
+export const ApplicationCard = forwardRef<HTMLDivElement, ApplicationCardProps>(
+  function ApplicationCard(
+    { app, action, overdue = false, dragging = false, className, ...rest },
+    ref,
+  ) {
+    return (
+      <div
+        ref={ref}
+        className={cn(
+          "group/card rounded-md border border-l-2 bg-card p-2.5 text-data shadow-xs",
+          (app.dashboardGroup && STATUS_BORDER_CLASS[app.dashboardGroup]) ??
+            "border-l-transparent",
+          dragging && "opacity-60",
+          className,
+        )}
+        {...rest}
+      >
+        <div className="flex items-start gap-1.5">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                {String(app.num).padStart(3, "0")}
+              </span>
+              {overdue ? (
+                <AlertTriangle
+                  className="size-3 text-score-low"
+                  aria-label="Follow-up overdue"
+                />
+              ) : null}
+            </div>
+            <Link
+              href={`/app/${app.num}`}
+              className="mt-0.5 block truncate font-medium hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+              title={`${app.company} — ${app.role}`}
+            >
+              {app.company}
+            </Link>
+            <p className="truncate text-muted-foreground" title={app.role}>
+              {app.role}
+            </p>
+          </div>
+          {action}
+        </div>
+
+        <div className="mt-2 flex items-center gap-2">
+          <ScoreBadge raw={app.scoreRaw} score={app.score} />
+          <span className="font-mono text-xs tabular-nums text-muted-foreground">
+            {app.date}
+          </span>
+          {app.hasPdf ? (
+            <FileText
+              className="ml-auto size-3.5 text-muted-foreground"
+              aria-label="CV PDF generated"
+            />
+          ) : null}
+        </div>
+
+        {app.notes.trim() !== "" ? (
+          <p
+            className="mt-2 line-clamp-2 text-xs leading-snug text-muted-foreground"
+            title={app.notes}
+          >
+            {app.notes}
+          </p>
+        ) : null}
+      </div>
+    );
+  },
+);
