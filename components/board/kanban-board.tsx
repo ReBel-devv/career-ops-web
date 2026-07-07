@@ -39,11 +39,13 @@ export function KanbanBoard({
   states,
   onMove,
   disabled = false,
+  overdueNums,
 }: {
   columns: BoardColumn[];
   states: CanonicalState[];
   onMove: (app: Application, statusId: string) => void;
   disabled?: boolean;
+  overdueNums?: Set<number>;
 }) {
   const reducedMotion = usePrefersReducedMotion();
   const [activeApp, setActiveApp] = useState<Application | null>(null);
@@ -110,6 +112,7 @@ export function KanbanBoard({
             states={states}
             onMove={onMove}
             disabled={disabled}
+            overdueNums={overdueNums}
           />
         ))}
       </div>
@@ -128,11 +131,13 @@ function Column({
   states,
   onMove,
   disabled,
+  overdueNums,
 }: {
   column: BoardColumn;
   states: CanonicalState[];
   onMove: (app: Application, statusId: string) => void;
   disabled: boolean;
+  overdueNums?: Set<number>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.state.id });
   const dot = STATUS_DOT_CLASS[column.state.dashboardGroup] ?? "bg-muted-foreground/40";
@@ -163,6 +168,7 @@ function Column({
             states={states}
             onMove={onMove}
             disabled={disabled}
+            overdue={overdueNums?.has(app.num) ?? false}
           />
         ))}
         {column.applications.length === 0 ? (
@@ -180,11 +186,13 @@ function DraggableCard({
   states,
   onMove,
   disabled,
+  overdue,
 }: {
   app: Application;
   states: CanonicalState[];
   onMove: (app: Application, statusId: string) => void;
   disabled: boolean;
+  overdue: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: app.num,
@@ -195,6 +203,7 @@ function DraggableCard({
     <ApplicationCard
       ref={setNodeRef}
       app={app}
+      overdue={overdue}
       dragging={isDragging}
       className={cn(!disabled && "cursor-grab active:cursor-grabbing")}
       style={transform ? { transform: CSS.Translate.toString(transform) } : undefined}

@@ -2,10 +2,14 @@ import type {
   Application,
   CanonicalState,
   Document,
+  FollowUpCadence,
   FollowUpData,
+  FollowUpWriteResult,
+  LogFollowUpInput,
   PipelineItem,
   Report,
   ReportFacet,
+  RescheduleFollowUpInput,
   ScanRecord,
   UpdateApplicationInput,
   UpdateApplicationResult,
@@ -35,6 +39,8 @@ export interface DataSource {
   getDocuments(num: number): Promise<Document[]>;
   /** Logged follow-ups + pins. (M4) */
   getFollowUps(): Promise<FollowUpData>;
+  /** Follow-up cadence from `followup-cadence.mjs --json` — never recomputed. (M4) */
+  getFollowUpCadence(): Promise<FollowUpCadence>;
   /** Pipeline inbox items, pending + processed. (M5) */
   getPipelineItems(): Promise<PipelineItem[]>;
   /** Scanner dedup history. */
@@ -48,4 +54,15 @@ export interface DataSource {
   updateApplication(
     input: UpdateApplicationInput,
   ): Promise<UpdateApplicationResult>;
+  /**
+   * Reschedule an application's next follow-up to land on `input.date`.
+   * Append-only pin via followup-seed.mjs --force (never edits existing
+   * lines). Throws `FollowUpWriteError` on failure. (M4) */
+  rescheduleFollowUp(
+    input: RescheduleFollowUpInput,
+  ): Promise<FollowUpWriteResult>;
+  /**
+   * Log that a follow-up was sent — appends one table row to
+   * data/follow-ups.md (never edits existing lines; re-parse gated). (M4) */
+  logFollowUp(input: LogFollowUpInput): Promise<FollowUpWriteResult>;
 }

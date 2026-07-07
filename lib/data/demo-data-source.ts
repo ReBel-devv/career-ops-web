@@ -3,16 +3,24 @@ import {
   statesFileSchema,
   type Application,
   type CanonicalState,
+  type CadenceEntry,
   type Document,
+  type FollowUpCadence,
   type FollowUpData,
+  type FollowUpLog,
+  type FollowUpUrgency,
+  type FollowUpWriteResult,
+  type LogFollowUpInput,
   type PipelineItem,
   type Report,
   type ReportFacet,
+  type RescheduleFollowUpInput,
   type ScanRecord,
   type UpdateApplicationInput,
   type UpdateApplicationResult,
 } from "@/lib/domain";
 import {
+  FollowUpWriteError,
   resolveWritableStatus,
   sanitizeNotes,
   TrackerWriteError,
@@ -69,6 +77,36 @@ const DEMO_APPS: DemoApp[] = [
  * instance. Never touches any file.
  */
 const demoOverrides = new Map<number, { statusId?: string; notes?: string }>();
+
+/**
+ * In-memory follow-up state for the demo (stateless, resets on reload).
+ * Reschedule appends a pin override; log-sent appends a table row — mirroring
+ * the FS mode's append-only semantics without ever touching a file.
+ */
+const demoPins = new Map<number, { date: string; setDate: string }>();
+const demoLogs: FollowUpLog[] = [];
+
+/** Days since application, keyed by demo app num — drives dynamic cadence dates
+ * so the demo calendar never goes stale (one overdue, one upcoming). */
+const DEMO_APPLIED_OFFSET: Record<number, number> = { 1: 3, 2: 9, 7: 1 };
+const DEMO_ACTIONABLE_IDS = new Set(["applied", "responded", "interview"]);
+const DEMO_APPLIED_FIRST = 7;
+
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addDaysISO(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function daysBetweenISO(from: string, to: string): number {
+  const a = new Date(`${from}T00:00:00.000Z`).getTime();
+  const b = new Date(`${to}T00:00:00.000Z`).getTime();
+  return Math.floor((b - a) / 86_400_000);
+}
 
 export class DemoDataSource implements DataSource {
   async getStates(): Promise<CanonicalState[]> {
@@ -166,7 +204,115 @@ export class DemoDataSource implements DataSource {
   }
 
   async getFollowUps(): Promise<FollowUpData> {
-    return { logs: [], pins: [] }; // M7: dynamic date offsets so demo never stales
+    return {
+      logs: [...demoLogs],
+      pins: [...demoPins.entries()].map(([appNum, p]) => ({
+        appNum,
+        date: p.date,
+        setDate: p.setDate,
+      })),
+    };
+  }
+
+  async getFollowUpCadence(): Promise<FollowUpCadence> {
+    const today = todayISO();
+    const apps = await this.getApplications();
+    const entries: CadenceEntry[] = apps
+      .filter((a) => a.statusId && DEMO_ACTIONABLE_IDS.has(a.statusId))
+      .map((a): CadenceEntry => {
+        const offset = DEMO_APPLIED_OFFSET[a.num] ?? 5;
+        const appliedDate = addDaysISO(today, -offset);
+        const logsForApp = demoLogs.filter((l) => l.appNum === a.num);
+        const pin = demoPins.get(a.num);
+        const nextFollowupDate =
+          pin?.date ?? addDaysISO(appliedDate, DEMO_APPLIED_FIRST);
+        const daysUntilNext = daysBetweenISO(today, nextFollowupDate);
+        const urgency: FollowUpUrgency =
+          daysUntilNext <= 0 ? "overdue" : "waiting";
+        return {
+          num: a.num,
+          date: a.date,
+          appliedDate,
+          company: a.company,
+          role: a.role,
+          status: a.statusId as string,
+          score: a.scoreRaw,
+          notes: a.notes,
+          reportPath: null,
+          contacts: [],
+          daysSinceApplication: offset,
+          daysSinceLastFollowup: logsForApp.length ? 0 : null,
+          followupCount: logsForApp.length,
+          urgency,
+          nextFollowupDate,
+          nextOverride: pin?.date ?? null,
+          daysUntilNext,
+        };
+      });
+    const order: Record<FollowUpUrgency, number> = {
+      urgent: 0,
+      overdue: 1,
+      waiting: 2,
+      cold: 3,
+    };
+    entries.sort((x, y) => order[x.urgency] - order[y.urgency]);
+    return {
+      metadata: {
+        analysisDate: today,
+        totalTracked: apps.length,
+        actionable: entries.length,
+        overdue: entries.filter((e) => e.urgency === "overdue").length,
+        urgent: entries.filter((e) => e.urgency === "urgent").length,
+        cold: entries.filter((e) => e.urgency === "cold").length,
+        waiting: entries.filter((e) => e.urgency === "waiting").length,
+      },
+      entries,
+      cadenceConfig: {
+        applied_first: DEMO_APPLIED_FIRST,
+        applied_subsequent: 7,
+        applied_max_followups: 2,
+        responded_initial: 1,
+        responded_subsequent: 3,
+        interview_thankyou: 1,
+      },
+    };
+  }
+
+  async rescheduleFollowUp(
+    input: RescheduleFollowUpInput,
+  ): Promise<FollowUpWriteResult> {
+    const app = (await this.getApplications()).find((a) => a.num === input.num);
+    if (!app) {
+      throw new FollowUpWriteError(
+        "INVALID_INPUT",
+        `Application #${input.num} not found in the demo dataset.`,
+      );
+    }
+    demoPins.set(input.num, { date: input.date, setDate: todayISO() });
+    return { ok: true, date: input.date, kind: "reschedule" };
+  }
+
+  async logFollowUp(input: LogFollowUpInput): Promise<FollowUpWriteResult> {
+    const app = (await this.getApplications()).find((a) => a.num === input.num);
+    if (!app) {
+      throw new FollowUpWriteError(
+        "INVALID_INPUT",
+        `Application #${input.num} not found in the demo dataset.`,
+      );
+    }
+    const num = demoLogs.reduce((m, l) => Math.max(m, l.num), 0) + 1;
+    const date = input.date ?? todayISO();
+    demoLogs.push({
+      num,
+      appNum: input.num,
+      date,
+      company: app.company,
+      role: app.role,
+      channel: sanitizeNotes(input.channel ?? "email") || "email",
+      contact: sanitizeNotes(input.contact ?? ""),
+      notes: sanitizeNotes(input.notes ?? ""),
+    });
+    return { ok: true, date, kind: "log", num };
   }
 
   async getPipelineItems(): Promise<PipelineItem[]> {

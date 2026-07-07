@@ -25,11 +25,13 @@ export function MobileBoard({
   states,
   onMove,
   disabled = false,
+  overdueNums,
 }: {
   columns: BoardColumn[];
   states: CanonicalState[];
   onMove: (app: Application, statusId: string) => void;
   disabled?: boolean;
+  overdueNums?: Set<number>;
 }) {
   const [selected, setSelected] = useState(columns[0]?.state.id ?? "");
   const [moveTarget, setMoveTarget] = useState<Application | null>(null);
@@ -82,6 +84,7 @@ export function MobileBoard({
             <ApplicationCard
               key={app.num}
               app={app}
+              overdue={overdueNums?.has(app.num) ?? false}
               action={
                 <button
                   type="button"

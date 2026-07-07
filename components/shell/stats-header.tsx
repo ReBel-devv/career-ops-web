@@ -3,8 +3,9 @@
 import { useMemo } from "react";
 import { Search } from "lucide-react";
 import { AvatarMenu } from "./avatar-menu";
-import { useApplications } from "@/lib/client/queries";
+import { useApplications, useFollowUpCadence } from "@/lib/client/queries";
 import { computePipelineStats } from "@/lib/stats";
+import { followUpSummary } from "@/lib/follow-ups-view";
 import { openCommandPalette } from "@/components/command/command-palette";
 
 interface StatChip {
@@ -26,6 +27,7 @@ interface StatChip {
  */
 export function StatsHeader() {
   const { data, isSuccess } = useApplications();
+  const cadenceQuery = useFollowUpCadence();
 
   const chips = useMemo<StatChip[]>(() => {
     if (!isSuccess || !data) {
@@ -37,6 +39,8 @@ export function StatsHeader() {
       ];
     }
     const s = computePipelineStats(data);
+    // Follow-ups due/overdue come from followup-cadence.mjs (never recomputed).
+    const fu = cadenceQuery.data ? followUpSummary(cadenceQuery.data) : null;
     return [
       { label: "Applied", value: String(s.applied) },
       {
@@ -51,11 +55,11 @@ export function StatsHeader() {
       },
       {
         label: "Follow-ups due",
-        value: s.followUps.due === null ? "—" : String(s.followUps.due),
-        title: "Cadence wiring lands in M4",
+        value: fu === null ? "—" : String(fu.due),
+        title: fu === null ? undefined : `${fu.overdue} overdue`,
       },
     ];
-  }, [data, isSuccess]);
+  }, [data, isSuccess, cadenceQuery.data]);
 
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur md:px-6">

@@ -11,12 +11,14 @@ import { z } from "zod";
 import {
   applicationSchema,
   documentSchema,
+  followUpCadenceSchema,
   followUpDataSchema,
   reportFacetSchema,
   reportSchema,
   type Application,
   type CanonicalState,
   type Document,
+  type FollowUpCadence,
   type FollowUpData,
   type Report,
   type ReportFacet,
@@ -114,10 +116,26 @@ export function useDocuments(num: number) {
 /** Logged follow-ups + pins (whole file; consumers slice per app). */
 export function useFollowUps() {
   return useQuery({
-    queryKey: ["follow-ups"] as const,
+    queryKey: followUpsKey,
     queryFn: async (): Promise<FollowUpData> => {
       const json = await fetchJson("/api/follow-ups");
       return followUpsResponse.parse(json).data;
+    },
+  });
+}
+
+const followUpCadenceResponse = z.object({ cadence: followUpCadenceSchema });
+
+export const followUpCadenceKey = ["follow-ups-cadence"] as const;
+export const followUpsKey = ["follow-ups"] as const;
+
+/** Follow-up cadence from followup-cadence.mjs (never recomputed client-side). */
+export function useFollowUpCadence() {
+  return useQuery({
+    queryKey: followUpCadenceKey,
+    queryFn: async (): Promise<FollowUpCadence> => {
+      const json = await fetchJson("/api/follow-ups/cadence");
+      return followUpCadenceResponse.parse(json).cadence;
     },
   });
 }
@@ -322,5 +340,84 @@ export function useApplicationActions() {
       mutation.mutate({ kind: "notes", app, notes });
     },
     isPending: mutation.isPending,
+  };
+}
+
+const followUpWriteResponse = z.object({
+  ok: z.literal(true),
+  date: z.string(),
+  kind: z.enum(["reschedule", "log"]),
+  num: z.number().optional(),
+});
+
+async function postFollowUp(
+  num: number,
+  action: "reschedule" | "log",
+  body: Record<string, unknown>,
+) {
+  const res = await fetch(`/api/follow-ups/${num}/${action}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+  return followUpWriteResponse.parse(json);
+}
+
+export interface LogFollowUpArgs {
+  date?: string;
+  channel?: string;
+  contact?: string;
+  notes?: string;
+}
+
+/**
+ * Follow-up write actions (reschedule + log-sent). Both invalidate the cadence,
+ * the follow-ups list, AND the applications cache (the board's overdue glyph is
+ * derived from cadence, so cards refresh too).
+ */
+export function useFollowUpActions() {
+  const qc = useQueryClient();
+
+  const invalidate = () => {
+    void qc.invalidateQueries({ queryKey: followUpCadenceKey });
+    void qc.invalidateQueries({ queryKey: followUpsKey });
+  };
+
+  const reschedule = useMutation({
+    mutationFn: ({ num, date }: { num: number; date: string }) =>
+      postFollowUp(num, "reschedule", { date }),
+    onSuccess: (data) => {
+      invalidate();
+      toast.success(`Follow-up rescheduled to ${data.date}`);
+    },
+    onError: (error) =>
+      toast.error("Couldn't reschedule", {
+        description: error instanceof Error ? error.message : String(error),
+      }),
+  });
+
+  const log = useMutation({
+    mutationFn: ({ num, ...body }: { num: number } & LogFollowUpArgs) =>
+      postFollowUp(num, "log", body),
+    onSuccess: (data) => {
+      invalidate();
+      toast.success(`Follow-up logged for ${data.date}`);
+    },
+    onError: (error) =>
+      toast.error("Couldn't log the follow-up", {
+        description: error instanceof Error ? error.message : String(error),
+      }),
+  });
+
+  return {
+    reschedule(num: number, date: string) {
+      reschedule.mutate({ num, date });
+    },
+    logSent(num: number, args: LogFollowUpArgs = {}) {
+      log.mutate({ num, ...args });
+    },
+    isPending: reschedule.isPending || log.isPending,
   };
 }

@@ -10,10 +10,14 @@ import {
   type Application,
   type CanonicalState,
   type Document,
+  type FollowUpCadence,
   type FollowUpData,
+  type FollowUpWriteResult,
+  type LogFollowUpInput,
   type PipelineItem,
   type Report,
   type ReportFacet,
+  type RescheduleFollowUpInput,
   type ScanRecord,
   type UpdateApplicationInput,
   type UpdateApplicationResult,
@@ -22,8 +26,18 @@ import { getConfig } from "@/lib/config";
 import { parseReport, reportFacet } from "@/lib/parsers/report";
 import { parseFollowUps } from "@/lib/parsers/follow-ups";
 import { matchDocuments, parsePdfIndex } from "@/lib/parsers/documents";
-import { runFollowupSeed, runTrackerSync } from "@/lib/scripts";
-import { TrackerWriteError, writeTrackerCell } from "@/lib/writers";
+import {
+  runFollowupCadence,
+  runFollowupReschedule,
+  runFollowupSeed,
+  runTrackerSync,
+} from "@/lib/scripts";
+import {
+  appendFollowUpLog,
+  FollowUpWriteError,
+  TrackerWriteError,
+  writeTrackerCell,
+} from "@/lib/writers";
 import type { DataSource } from "./data-source";
 import { readStatesFile } from "./states-file";
 import { loadTrackerParse, type TrackerRow } from "./tracker-module";
@@ -198,6 +212,62 @@ export class FsDataSource implements DataSource {
       throw error;
     }
     return parseFollowUps(content);
+  }
+
+  async getFollowUpCadence(): Promise<FollowUpCadence> {
+    return runFollowupCadence(this.repoPath);
+  }
+
+  async rescheduleFollowUp(
+    input: RescheduleFollowUpInput,
+  ): Promise<FollowUpWriteResult> {
+    if (getConfig().readOnly) {
+      throw new FollowUpWriteError(
+        "READ_ONLY",
+        "READ_ONLY is set — all mutations are disabled.",
+      );
+    }
+    // applied_first comes from the CLI's own cadence config (profile.yml +
+    // defaults) — the only place it's authoritatively resolved.
+    const cadence = await this.getFollowUpCadence();
+    const appliedFirst = cadence.cadenceConfig.applied_first ?? 7;
+    const result = await runFollowupReschedule(
+      this.repoPath,
+      input.num,
+      input.date,
+      appliedFirst,
+    );
+    if (!result.ok) {
+      throw new FollowUpWriteError("PARSE_FAILED", result.error);
+    }
+    return { ok: true, date: result.date, kind: "reschedule" };
+  }
+
+  async logFollowUp(input: LogFollowUpInput): Promise<FollowUpWriteResult> {
+    if (getConfig().readOnly) {
+      throw new FollowUpWriteError(
+        "READ_ONLY",
+        "READ_ONLY is set — all mutations are disabled.",
+      );
+    }
+    const app = (await this.getApplications()).find((a) => a.num === input.num);
+    if (!app) {
+      throw new FollowUpWriteError(
+        "INVALID_INPUT",
+        `Application #${input.num} not found in the tracker.`,
+      );
+    }
+    const { num, date } = await appendFollowUpLog({
+      repoPath: this.repoPath,
+      appNum: input.num,
+      company: app.company,
+      role: app.role,
+      date: input.date,
+      channel: input.channel,
+      contact: input.contact,
+      notes: input.notes,
+    });
+    return { ok: true, date, kind: "log", num };
   }
 
   // TODO(M5): parse pipeline.md Pending/Processed sections.

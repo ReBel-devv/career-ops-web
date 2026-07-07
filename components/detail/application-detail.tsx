@@ -29,6 +29,7 @@ import {
   useApplicationActions,
   useApplications,
   useDocuments,
+  useFollowUpCadence,
   useFollowUps,
   useReport,
   useStates,
@@ -36,6 +37,7 @@ import {
 import { sanitizeNotes } from "@/lib/notes";
 import type {
   Application,
+  CadenceEntry,
   CanonicalState,
   Document,
   FollowUpData,
@@ -62,6 +64,7 @@ export function ApplicationDetail({ num }: { num: number }) {
   const reportQuery = useReport(num);
   const documentsQuery = useDocuments(num);
   const followUpsQuery = useFollowUps();
+  const cadenceQuery = useFollowUpCadence();
   const mutationsEnabled = useMutationsEnabled();
 
   const app = appsQuery.data?.find((a) => a.num === num) ?? null;
@@ -118,7 +121,12 @@ export function ApplicationDetail({ num }: { num: number }) {
         loading={documentsQuery.isLoading}
       />
 
-      <Timeline app={app} report={report} followUps={followUpsQuery.data} />
+      <Timeline
+        app={app}
+        report={report}
+        followUps={followUpsQuery.data}
+        cadenceEntry={cadenceQuery.data?.entries.find((e) => e.num === num) ?? null}
+      />
 
       <NotesEditor app={app} editable={editable} />
 
@@ -395,10 +403,12 @@ function Timeline({
   app,
   report,
   followUps,
+  cadenceEntry,
 }: {
   app: Application;
   report: Report | null;
   followUps: FollowUpData | undefined;
+  cadenceEntry: CadenceEntry | null;
 }) {
   const evaluatedDate = report?.header.date ?? dateFromReportPath(report?.path);
   const isApplied = app.statusId !== null && APPLIED_IDS.has(app.statusId);
@@ -419,6 +429,30 @@ function Timeline({
 
   return (
     <Section title="Timeline">
+      {cadenceEntry && cadenceEntry.nextFollowupDate ? (
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-2 rounded-md border border-l-2 px-3 py-2 text-sm",
+            cadenceEntry.urgency === "overdue" || cadenceEntry.urgency === "urgent"
+              ? "border-l-score-low bg-score-low/5"
+              : "border-l-primary",
+          )}
+        >
+          <CalendarClock className="size-3.5 shrink-0 text-primary" aria-hidden />
+          <span className="font-medium">Next action:</span>
+          <span className="text-muted-foreground">
+            follow up{" "}
+            <span className="font-mono tabular-nums">{cadenceEntry.nextFollowupDate}</span>
+            {cadenceEntry.daysUntilNext !== null
+              ? cadenceEntry.daysUntilNext === 0
+                ? " (due today)"
+                : cadenceEntry.daysUntilNext < 0
+                  ? ` (${Math.abs(cadenceEntry.daysUntilNext)}d overdue)`
+                  : ` (in ${cadenceEntry.daysUntilNext}d)`
+              : null}
+          </span>
+        </div>
+      ) : null}
       <ol className="flex flex-col gap-2.5 text-sm">
         {evaluatedDate ? <TimelineRow date={evaluatedDate} label="Evaluated" /> : null}
         {/* Decision 4: the tracker Date column IS the applied date once Applied. */}

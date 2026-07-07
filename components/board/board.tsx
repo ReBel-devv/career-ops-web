@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import {
   useApplications,
   useApplicationActions,
+  useFollowUpCadence,
   useReportFacets,
   useStates,
 } from "@/lib/client/queries";
@@ -14,6 +15,7 @@ import { MobileBoard } from "@/components/board/mobile-board";
 import { Skeleton } from "@/components/ui/skeleton";
 import { buildFacetIndex, filterApplications, parseFilters } from "@/lib/filters";
 import { groupApplications, visibleColumns } from "@/lib/grouping";
+import { overdueAppNums } from "@/lib/follow-ups-view";
 import type { Application } from "@/lib/domain";
 
 /**
@@ -33,8 +35,14 @@ export function Board() {
   const appsQuery = useApplications();
   const statesQuery = useStates();
   const facetsQuery = useReportFacets();
+  const cadenceQuery = useFollowUpCadence();
   const actions = useApplicationActions();
   const mutationsEnabled = useMutationsEnabled();
+
+  const overdueNums = useMemo(
+    () => (cadenceQuery.data ? overdueAppNums(cadenceQuery.data) : new Set<number>()),
+    [cadenceQuery.data],
+  );
 
   const board = useMemo(() => {
     if (!appsQuery.data || !statesQuery.data) return null;
@@ -84,6 +92,7 @@ export function Board() {
           states={board.states}
           onMove={onMove}
           disabled={!mutationsEnabled}
+          overdueNums={overdueNums}
         />
       </div>
       <div className="md:hidden">
@@ -92,6 +101,7 @@ export function Board() {
           states={board.states}
           onMove={onMove}
           disabled={!mutationsEnabled}
+          overdueNums={overdueNums}
         />
       </div>
     </>
