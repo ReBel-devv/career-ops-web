@@ -2,7 +2,17 @@
 
 import { useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { CalendarRange, Eye, EyeOff, Gauge, ListFilter, Search, X } from "lucide-react";
+import {
+  Building2,
+  CalendarRange,
+  Eye,
+  EyeOff,
+  Gauge,
+  ListFilter,
+  Search,
+  Shapes,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,9 +25,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { STATUS_DOT_CLASS } from "@/components/data/status-indicator";
-import { useStates } from "@/lib/client/queries";
+import { useReportFacets, useStates } from "@/lib/client/queries";
 import {
   applyFiltersToParams,
+  archetypeFamilies,
   hasActiveFilters,
   parseFilters,
   type AppFilters,
@@ -27,20 +38,39 @@ import { cn } from "@/lib/utils";
 /**
  * Search / filter / sort bar (F4). All state lives in the URL so it composes
  * across the Board and the Applications table and survives reload / sharing.
- *
- * Archetype and ATS-vendor facets (plan §3 F4) are deferred to M3 — they need
- * report data the tracker row doesn't carry (see lib/filters.ts).
+ * Archetype + ATS-vendor facets (M3) draw their options from the parsed
+ * report facets (`/api/report-facets`).
  */
 export function FilterBar() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { data: states = [] } = useStates();
+  const { data: facets = [] } = useReportFacets();
 
   const filters = useMemo(
     () => parseFilters(new URLSearchParams(searchParams.toString())),
     [searchParams],
   );
+
+  // Facet option lists, derived from the parsed reports (sorted, deduped).
+  const archetypeOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const f of facets) for (const fam of archetypeFamilies(f.archetype)) set.add(fam);
+    return [...set].sort();
+  }, [facets]);
+  const vendorOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const f of facets) if (f.atsVendor) set.add(f.atsVendor);
+    return [...set].sort();
+  }, [facets]);
+
+  function toggleListValue(key: "archetypes" | "vendors", value: string, checked: boolean) {
+    const list = checked
+      ? [...filters[key], value]
+      : filters[key].filter((v) => v !== value);
+    commit({ ...filters, [key]: list });
+  }
 
   // Push filters to the URL without stacking history entries.
   function commit(next: AppFilters) {
@@ -127,6 +157,70 @@ export function FilterBar() {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Archetype (from report facets, M3) */}
+      {archetypeOptions.length > 0 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <Shapes className="size-4" aria-hidden />
+              Archetype
+              {filters.archetypes.length > 0 ? (
+                <span className="rounded-sm bg-primary/15 px-1 font-mono text-xs tabular-nums text-primary">
+                  {filters.archetypes.length}
+                </span>
+              ) : null}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-64">
+            <DropdownMenuLabel>Filter by archetype</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {archetypeOptions.map((option) => (
+              <DropdownMenuCheckboxItem
+                key={option}
+                checked={filters.archetypes.includes(option)}
+                onCheckedChange={(c) => toggleListValue("archetypes", option, c === true)}
+                onSelect={(e) => e.preventDefault()}
+                className="text-data"
+              >
+                {option}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
+
+      {/* ATS vendor (from report URL hosts, M3) */}
+      {vendorOptions.length > 0 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <Building2 className="size-4" aria-hidden />
+              ATS
+              {filters.vendors.length > 0 ? (
+                <span className="rounded-sm bg-primary/15 px-1 font-mono text-xs tabular-nums text-primary">
+                  {filters.vendors.length}
+                </span>
+              ) : null}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="w-48">
+            <DropdownMenuLabel>Filter by ATS vendor</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {vendorOptions.map((option) => (
+              <DropdownMenuCheckboxItem
+                key={option}
+                checked={filters.vendors.includes(option)}
+                onCheckedChange={(c) => toggleListValue("vendors", option, c === true)}
+                onSelect={(e) => e.preventDefault()}
+                className="text-data"
+              >
+                {option}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
 
       {/* Score range */}
       <Popover>
@@ -223,6 +317,8 @@ export function FilterBar() {
               dateFrom: null,
               dateTo: null,
               archived: filters.archived,
+              archetypes: [],
+              vendors: [],
             })
           }
         >

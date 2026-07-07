@@ -7,6 +7,7 @@ import {
   buildStatusResolver,
   type CanonicalState,
 } from "@/lib/domain";
+import { sanitizeNotes } from "@/lib/notes";
 import { readStatesFile } from "@/lib/data/states-file";
 import {
   loadTrackerParse,
@@ -85,19 +86,6 @@ export interface TrackerWriteResult {
 }
 
 const DATE_IN_STATUS_RE = /\d{4}-\d{2}-\d{2}/;
-
-/**
- * Neutralize characters that would corrupt the markdown table — the exact
- * convention of `cell()` in merge-tracker.mjs: newlines collapse to a space,
- * literal pipes become " / " (backslash-escaping would still split on the
- * inner pipe because every reader uses a raw `line.split('|')`).
- */
-export function sanitizeNotes(value: string): string {
-  return value
-    .replace(/[\r\n]+/g, " ")
-    .replace(/\s*\|\s*/g, " / ")
-    .trim();
-}
 
 /**
  * Strict write-side status validation. Reads are alias-tolerant, but writes

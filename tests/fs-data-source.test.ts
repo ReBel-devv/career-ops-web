@@ -84,6 +84,58 @@ describe.skipIf(!parsersReady)("FsDataSource — synthetic fixture", () => {
   });
 });
 
+describe.skipIf(!parsersReady)("FsDataSource — M3 report / documents / follow-ups", () => {
+  const ds = new FsDataSource(SYNTHETIC);
+
+  it("getReport parses the linked report (header + Machine Summary + blocks)", async () => {
+    const report = await ds.getReport(1);
+    expect(report).not.toBeNull();
+    expect(report?.path).toBe("reports/001-nimbus-labs-2026-06-01.md");
+    expect(report?.machineSummary?.final_decision).toBe("Apply");
+    expect(report?.scoreGlobal?.global?.score).toBe("4.4/5");
+    expect(report?.atsVendor).toBe("Lever");
+  });
+
+  it("getReport degrades gracefully on a report without Machine Summary", async () => {
+    const report = await ds.getReport(2);
+    expect(report).not.toBeNull();
+    expect(report?.machineSummary).toBeNull();
+    expect(report?.scoreGlobal).toBeNull();
+    expect(report?.markdown.length).toBeGreaterThan(0);
+  });
+
+  it("getReport returns null when no report file exists", async () => {
+    expect(await ds.getReport(99)).toBeNull();
+  });
+
+  it("getReportFacets returns one facet per report file", async () => {
+    const facets = await ds.getReportFacets();
+    expect(facets.map((f) => f.num).sort()).toEqual([1, 2]);
+    const one = facets.find((f) => f.num === 1);
+    expect(one?.atsVendor).toBe("Lever");
+    expect(one?.archetype).toContain("Design Engineer");
+    expect(one?.locationBucket).toBe("EU");
+  });
+
+  it("getDocuments resolves the CV from pdf-index and the cover by slug", async () => {
+    const docs = await ds.getDocuments(1);
+    expect(docs.map((d) => [d.kind, d.fileName])).toEqual([
+      ["cv", "cv-test-candidate-nimbus-labs-2026-06-01.pdf"],
+      ["cover-letter", "nimbus-labs-design-engineer-cover.pdf"],
+    ]);
+  });
+
+  it("getDocuments returns [] when nothing matches (honest no-document)", async () => {
+    expect(await ds.getDocuments(3)).toEqual([]);
+  });
+
+  it("getFollowUps parses logs and pins", async () => {
+    const data = await ds.getFollowUps();
+    expect(data.logs).toHaveLength(2);
+    expect(data.pins).toHaveLength(3);
+  });
+});
+
 describe.skipIf(!parsersReady)("FsDataSource — header-aware Location layout", () => {
   const ds = new FsDataSource(SYNTHETIC_LOCATION);
 
@@ -127,6 +179,34 @@ describe.skipIf(!realReady)("FsDataSource — real tracker snapshot", () => {
         expect(app.score).toBeGreaterThanOrEqual(0);
         expect(app.score).toBeLessThanOrEqual(5);
       }
+    }
+  });
+
+  it("getReport resolves every tracker report link (M3)", async () => {
+    const apps = await ds.getApplications();
+    const withReports = apps.filter((a) => a.reportPath !== null);
+    expect(withReports.length).toBeGreaterThan(0);
+    for (const app of withReports) {
+      const report = await ds.getReport(app.num);
+      expect(report, `#${app.num} ${app.company}`).not.toBeNull();
+      expect(report?.header.url, `#${app.num}`).toMatch(/^https?:\/\//);
+    }
+  });
+
+  it("getReportFacets covers every real report (M3 — M5 aggregate seam)", async () => {
+    const facets = await ds.getReportFacets();
+    expect(facets.length).toBeGreaterThan(0);
+    for (const facet of facets) {
+      expect(facet.atsVendor).not.toBeNull();
+    }
+  });
+
+  it("getFollowUps parses the real snapshot when present", async () => {
+    const data = await ds.getFollowUps();
+    // Real file may legitimately be missing — but when present it must parse.
+    for (const pin of data.pins) {
+      expect(pin.appNum).toBeGreaterThan(0);
+      expect(pin.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     }
   });
 });

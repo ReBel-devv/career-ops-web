@@ -21,8 +21,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
+  drawer,
 }: Readonly<{
   children: React.ReactNode;
+  /** Parallel slot for the intercepted application-detail drawer (M3). */
+  drawer?: React.ReactNode;
 }>) {
   const config = getConfig();
   return (
@@ -41,6 +44,7 @@ export default function RootLayout({
             </div>
           </div>
           <TabBar />
+          {drawer}
           {/* useSearchParams inside the palette needs a Suspense boundary. */}
           <Suspense fallback={null}>
             <CommandPalette />

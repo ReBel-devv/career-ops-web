@@ -9,6 +9,7 @@ import {
 import { groupApplications, visibleColumns } from "@/lib/grouping";
 import {
   applyFiltersToParams,
+  buildFacetIndex,
   EMPTY_FILTERS,
   filterApplications,
   isArchived,
@@ -193,6 +194,8 @@ describe("filters — URL param round-trip", () => {
       dateFrom: "2026-07-01",
       dateTo: null,
       archived: true,
+      archetypes: ["Frontend Engineer"],
+      vendors: ["Lever"],
     };
     const params = applyFiltersToParams(new URLSearchParams(), f);
     expect(parseFilters(params)).toEqual(f);
@@ -261,5 +264,54 @@ describe("computePipelineStats — matches analyze-patterns funnel conventions",
   it("leaves follow-up cadence null as an M4 seam", () => {
     const stats = computePipelineStats(apps);
     expect(stats.followUps).toEqual({ due: null, overdue: null });
+  });
+});
+
+describe("filters — archetype + ATS vendor facets (M3)", () => {
+  const withReport = makeApp({ statusRaw: "Applied", company: "Nimbus Labs" });
+  const otherReport = makeApp({ statusRaw: "Applied", company: "Vectorline" });
+  const noReport = makeApp({ statusRaw: "Applied", company: "Reportless" });
+  const facets = buildFacetIndex([
+    {
+      num: withReport.num,
+      archetype: "Design Engineer (UI/Motion) + Frontend Engineer (React/Next.js)",
+      atsVendor: "Lever",
+      locationBucket: "EU",
+    },
+    {
+      num: otherReport.num,
+      archetype: "Mobile Engineer (React Native)",
+      atsVendor: "Greenhouse",
+      locationBucket: null,
+    },
+  ]);
+
+  it("matches on any archetype family of a combined archetype", () => {
+    const f = { ...EMPTY_FILTERS, archetypes: ["Frontend Engineer"] };
+    expect(matchesFilters(withReport, f, facets)).toBe(true);
+    expect(matchesFilters(otherReport, f, facets)).toBe(false);
+  });
+
+  it("excludes rows without a report when an archetype filter is active", () => {
+    const f = { ...EMPTY_FILTERS, archetypes: ["Design Engineer"] };
+    expect(matchesFilters(noReport, f, facets)).toBe(false);
+  });
+
+  it("filters by ATS vendor and composes with AND", () => {
+    const f = { ...EMPTY_FILTERS, vendors: ["Greenhouse"] };
+    expect(filterApplications([withReport, otherReport, noReport], f, facets)).toEqual([
+      otherReport,
+    ]);
+    const both = {
+      ...EMPTY_FILTERS,
+      vendors: ["Lever"],
+      archetypes: ["Mobile Engineer"],
+    };
+    expect(filterApplications([withReport, otherReport, noReport], both, facets)).toEqual([]);
+  });
+
+  it("is a no-op when the facet filters are empty", () => {
+    expect(matchesFilters(noReport, EMPTY_FILTERS, facets)).toBe(true);
+    expect(matchesFilters(noReport, EMPTY_FILTERS)).toBe(true);
   });
 });

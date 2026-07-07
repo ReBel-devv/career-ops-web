@@ -8,7 +8,19 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { z } from "zod";
-import { applicationSchema, type Application, type CanonicalState } from "@/lib/domain";
+import {
+  applicationSchema,
+  documentSchema,
+  followUpDataSchema,
+  reportFacetSchema,
+  reportSchema,
+  type Application,
+  type CanonicalState,
+  type Document,
+  type FollowUpData,
+  type Report,
+  type ReportFacet,
+} from "@/lib/domain";
 
 /**
  * Client-side server-state layer (TanStack Query). The Board, the Applications
@@ -61,6 +73,63 @@ export function useStates() {
     queryFn: async (): Promise<CanonicalState[]> => {
       const json = await fetchJson("/api/states");
       return statesResponse.parse(json).states;
+    },
+  });
+}
+
+const reportResponse = z.object({ report: reportSchema });
+const documentsResponse = z.object({ documents: z.array(documentSchema) });
+const followUpsResponse = z.object({ data: followUpDataSchema });
+const reportFacetsResponse = z.object({ facets: z.array(reportFacetSchema) });
+
+/** Parsed report for one application (null when the endpoint 404s). */
+export function useReport(num: number) {
+  return useQuery({
+    queryKey: ["report", num] as const,
+    queryFn: async (): Promise<Report | null> => {
+      const res = await fetch(`/api/applications/${num}/report`, {
+        headers: { accept: "application/json" },
+      });
+      if (res.status === 404) return null;
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error ?? `Request failed (${res.status})`);
+      }
+      return reportResponse.parse(await res.json()).report;
+    },
+  });
+}
+
+/** CV + cover-letter documents for one application. */
+export function useDocuments(num: number) {
+  return useQuery({
+    queryKey: ["documents", num] as const,
+    queryFn: async (): Promise<Document[]> => {
+      const json = await fetchJson(`/api/applications/${num}/documents`);
+      return documentsResponse.parse(json).documents;
+    },
+  });
+}
+
+/** Logged follow-ups + pins (whole file; consumers slice per app). */
+export function useFollowUps() {
+  return useQuery({
+    queryKey: ["follow-ups"] as const,
+    queryFn: async (): Promise<FollowUpData> => {
+      const json = await fetchJson("/api/follow-ups");
+      return followUpsResponse.parse(json).data;
+    },
+  });
+}
+
+/** Per-report facets (archetype / vendor / location) powering the filters. */
+export function useReportFacets() {
+  return useQuery({
+    queryKey: ["report-facets"] as const,
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<ReportFacet[]> => {
+      const json = await fetchJson("/api/report-facets");
+      return reportFacetsResponse.parse(json).facets;
     },
   });
 }

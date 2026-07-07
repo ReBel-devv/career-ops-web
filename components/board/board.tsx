@@ -2,12 +2,17 @@
 
 import { useMemo } from "react";
 import { useSearchParams } from "next/navigation";
-import { useApplications, useApplicationActions, useStates } from "@/lib/client/queries";
+import {
+  useApplications,
+  useApplicationActions,
+  useReportFacets,
+  useStates,
+} from "@/lib/client/queries";
 import { useMutationsEnabled } from "@/components/providers/app-providers";
 import { KanbanBoard } from "@/components/board/kanban-board";
 import { MobileBoard } from "@/components/board/mobile-board";
 import { Skeleton } from "@/components/ui/skeleton";
-import { filterApplications, parseFilters } from "@/lib/filters";
+import { buildFacetIndex, filterApplications, parseFilters } from "@/lib/filters";
 import { groupApplications, visibleColumns } from "@/lib/grouping";
 import type { Application } from "@/lib/domain";
 
@@ -27,18 +32,20 @@ export function Board() {
 
   const appsQuery = useApplications();
   const statesQuery = useStates();
+  const facetsQuery = useReportFacets();
   const actions = useApplicationActions();
   const mutationsEnabled = useMutationsEnabled();
 
   const board = useMemo(() => {
     if (!appsQuery.data || !statesQuery.data) return null;
-    const filtered = filterApplications(appsQuery.data, filters);
+    const facetIndex = buildFacetIndex(facetsQuery.data ?? []);
+    const filtered = filterApplications(appsQuery.data, filters, facetIndex);
     const grouped = groupApplications(filtered, statesQuery.data);
     return {
       columns: visibleColumns(grouped, filters.archived),
       states: statesQuery.data,
     };
-  }, [appsQuery.data, statesQuery.data, filters]);
+  }, [appsQuery.data, statesQuery.data, facetsQuery.data, filters]);
 
   if (appsQuery.isError || statesQuery.isError) {
     const message =

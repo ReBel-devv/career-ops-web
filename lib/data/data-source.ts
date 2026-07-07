@@ -1,9 +1,11 @@
 import type {
   Application,
   CanonicalState,
+  Document,
   FollowUpData,
   PipelineItem,
   Report,
+  ReportFacet,
   ScanRecord,
   UpdateApplicationInput,
   UpdateApplicationResult,
@@ -26,6 +28,11 @@ export interface DataSource {
   getStates(): Promise<CanonicalState[]>;
   /** Parsed evaluation report for an application, null when absent. (M3) */
   getReport(num: number): Promise<Report | null>;
+  /** Lightweight per-report facets (archetype / vendor / location) for the
+   * filters (F4). One entry per report file found. (M3) */
+  getReportFacets(): Promise<ReportFacet[]>;
+  /** Generated documents (CV + cover letters) for an application. (M3) */
+  getDocuments(num: number): Promise<Document[]>;
   /** Logged follow-ups + pins. (M4) */
   getFollowUps(): Promise<FollowUpData>;
   /** Pipeline inbox items, pending + processed. (M5) */

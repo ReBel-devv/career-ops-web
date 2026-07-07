@@ -3,9 +3,11 @@ import {
   statesFileSchema,
   type Application,
   type CanonicalState,
+  type Document,
   type FollowUpData,
   type PipelineItem,
   type Report,
+  type ReportFacet,
   type ScanRecord,
   type UpdateApplicationInput,
   type UpdateApplicationResult,
@@ -153,6 +155,14 @@ export class DemoDataSource implements DataSource {
 
   async getReport(_num: number): Promise<Report | null> {
     return null; // M7: fictional English reports
+  }
+
+  async getReportFacets(): Promise<ReportFacet[]> {
+    return []; // M7: facets for the fictional reports
+  }
+
+  async getDocuments(_num: number): Promise<Document[]> {
+    return []; // M7: placeholder PDFs
   }
 
   async getFollowUps(): Promise<FollowUpData> {

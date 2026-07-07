@@ -9,14 +9,19 @@ import {
   scanRecordSchema,
   type Application,
   type CanonicalState,
+  type Document,
   type FollowUpData,
   type PipelineItem,
   type Report,
+  type ReportFacet,
   type ScanRecord,
   type UpdateApplicationInput,
   type UpdateApplicationResult,
 } from "@/lib/domain";
 import { getConfig } from "@/lib/config";
+import { parseReport, reportFacet } from "@/lib/parsers/report";
+import { parseFollowUps } from "@/lib/parsers/follow-ups";
+import { matchDocuments, parsePdfIndex } from "@/lib/parsers/documents";
 import { runFollowupSeed, runTrackerSync } from "@/lib/scripts";
 import { TrackerWriteError, writeTrackerCell } from "@/lib/writers";
 import type { DataSource } from "./data-source";
@@ -84,14 +89,115 @@ export class FsDataSource implements DataSource {
     });
   }
 
-  // TODO(M3): parse report header + Machine Summary YAML + markdown body.
-  async getReport(_num: number): Promise<Report | null> {
-    return null;
+  /** Find the report file whose name starts with the zero-padded number. */
+  private async findReportFile(num: number): Promise<string | null> {
+    const prefix = `${String(num).padStart(3, "0")}-`;
+    let files: string[];
+    try {
+      files = await fs.readdir(this.resolve("reports"));
+    } catch (error: unknown) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
+    const match = files.find((f) => f.startsWith(prefix) && f.endsWith(".md"));
+    return match ?? null;
   }
 
-  // TODO(M4): parse follow-ups table + `- next #N …` pins.
+  /**
+   * Resolve a tracker row's report link against the tracker file's own
+   * directory (links are written relative to the tracker, e.g.
+   * `../reports/028-acme.md` — see merge-tracker.mjs normalization). Returns
+   * the report's absolute path, guarded to stay inside the repo.
+   */
+  private async reportPathFromTracker(num: number): Promise<string | null> {
+    let apps: Application[];
+    try {
+      apps = await this.getApplications();
+    } catch {
+      return null;
+    }
+    const linked = apps.find((a) => a.num === num)?.reportPath;
+    if (!linked) return null;
+    const trackerDir = this.resolve("data");
+    const resolved = path.resolve(trackerDir, linked);
+    const repoRoot = path.resolve(this.repoPath);
+    if (!resolved.startsWith(repoRoot + path.sep)) return null; // never escape
+    return resolved;
+  }
+
+  async getReport(num: number): Promise<Report | null> {
+    // Primary: the tracker's own report link, resolved against data/.
+    const fromTracker = await this.reportPathFromTracker(num);
+    if (fromTracker) {
+      try {
+        const content = await fs.readFile(fromTracker, "utf8");
+        const rel = path
+          .relative(path.resolve(this.repoPath), fromTracker)
+          .split(path.sep)
+          .join("/");
+        return parseReport({ content, path: rel, num });
+      } catch (error: unknown) {
+        if (!isNotFound(error)) throw error;
+        // Broken link → fall through to the filename scan.
+      }
+    }
+    // Fallback: scan reports/ for the zero-padded num prefix.
+    const filename = await this.findReportFile(num);
+    if (!filename) return null;
+    const relPath = `reports/${filename}`;
+    const content = await fs.readFile(this.resolve(relPath), "utf8");
+    return parseReport({ content, path: relPath, num });
+  }
+
+  async getReportFacets(): Promise<ReportFacet[]> {
+    let files: string[];
+    try {
+      files = await fs.readdir(this.resolve("reports"));
+    } catch (error: unknown) {
+      if (isNotFound(error)) return [];
+      throw error;
+    }
+    const reports = files.filter((f) => /^\d+-.*\.md$/.test(f));
+    const facets = await Promise.all(
+      reports.map(async (filename) => {
+        const num = Number.parseInt(filename.slice(0, filename.indexOf("-")), 10);
+        if (!Number.isInteger(num)) return null;
+        const content = await fs.readFile(this.resolve("reports", filename), "utf8");
+        return reportFacet(parseReport({ content, path: `reports/${filename}`, num }));
+      }),
+    );
+    return facets.filter((f): f is ReportFacet => f !== null);
+  }
+
+  async getDocuments(num: number): Promise<Document[]> {
+    const [indexContent, outputFiles, reportFilename] = await Promise.all([
+      fs.readFile(this.resolve("data", "pdf-index.tsv"), "utf8").catch((e: unknown) => {
+        if (isNotFound(e)) return "";
+        throw e;
+      }),
+      fs.readdir(this.resolve("output")).catch((e: unknown) => {
+        if (isNotFound(e)) return [] as string[];
+        throw e;
+      }),
+      this.findReportFile(num),
+    ]);
+    return matchDocuments({
+      num,
+      reportFilename,
+      indexEntries: parsePdfIndex(indexContent),
+      outputFiles: outputFiles.filter((f) => f.toLowerCase().endsWith(".pdf")),
+    });
+  }
+
   async getFollowUps(): Promise<FollowUpData> {
-    return { logs: [], pins: [] };
+    let content: string;
+    try {
+      content = await fs.readFile(this.resolve("data", "follow-ups.md"), "utf8");
+    } catch (error: unknown) {
+      if (isNotFound(error)) return { logs: [], pins: [] };
+      throw error;
+    }
+    return parseFollowUps(content);
   }
 
   // TODO(M5): parse pipeline.md Pending/Processed sections.

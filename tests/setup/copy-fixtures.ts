@@ -12,7 +12,7 @@
  * When CAREER_OPS_PATH is not set (e.g. CI without the private repo), nothing
  * is copied and the dependent suites skip themselves.
  */
-import { copyFile, mkdir, rm } from "node:fs/promises";
+import { copyFile, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
@@ -61,5 +61,34 @@ export default async function setup(): Promise<void> {
   await copyFile(
     path.join(repo, "templates", "states.yml"),
     path.join(REAL_DIR, "templates", "states.yml"),
+  );
+
+  // M3 report-parser fixtures: snapshot every report (read-only copy).
+  const reportsDir = path.join(repo, "reports");
+  const realReports = path.join(REAL_DIR, "reports");
+  await rm(realReports, { recursive: true, force: true });
+  await mkdir(realReports, { recursive: true });
+  if (existsSync(reportsDir)) {
+    for (const file of await readdir(reportsDir)) {
+      if (!file.endsWith(".md")) continue;
+      await copyFile(path.join(reportsDir, file), path.join(realReports, file));
+    }
+  }
+
+  // Follow-ups + pdf-index snapshots (optional files).
+  for (const rel of [
+    path.join("data", "follow-ups.md"),
+    path.join("data", "pdf-index.tsv"),
+  ]) {
+    const src = path.join(repo, rel);
+    if (existsSync(src)) await copyFile(src, path.join(REAL_DIR, rel));
+  }
+
+  // Documents heuristics need the output/ file LIST only (PDFs stay put).
+  const outputDir = path.join(repo, "output");
+  const outputFiles = existsSync(outputDir) ? await readdir(outputDir) : [];
+  await writeFile(
+    path.join(REAL_DIR, "output-files.json"),
+    JSON.stringify(outputFiles, null, 2),
   );
 }

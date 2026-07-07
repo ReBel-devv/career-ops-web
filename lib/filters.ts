@@ -1,15 +1,14 @@
-import type { Application } from "@/lib/domain";
+import type { Application, ReportFacet } from "@/lib/domain";
 
 /**
  * Shared search / filter / sort state (F4). Lives in the URL search params so
  * it composes across the Board and the Applications table and survives reload
  * and sharing. All filters compose with AND.
  *
- * Archetype and ATS-vendor filters (plan §3 F4) are intentionally NOT here yet:
- * both are derived from report data (Machine Summary archetype, report URL
- * host) that the tracker row doesn't carry — `Application` has no such field.
- * Report parsing lands in M3, so those two facets are deferred to M3. Every
- * other F4 facet (search, status, score range, date range, archived) is live.
+ * Archetype and ATS-vendor facets (added in M3) come from report data the
+ * tracker row doesn't carry: callers pass a `FacetIndex` (built from
+ * `GET /api/report-facets`) into `matchesFilters` / `filterApplications`.
+ * When those filters are active, rows WITHOUT a report never match.
  */
 
 export interface AppFilters {
@@ -25,6 +24,39 @@ export interface AppFilters {
   dateTo: string | null;
   /** Show archived rows (Rejected / Discarded / SKIP). Default off (Decision 8). */
   archived: boolean;
+  /** Archetype families to include (see `archetypeFamilies`); empty = all. */
+  archetypes: string[];
+  /** ATS vendor names to include (report URL host); empty = all. */
+  vendors: string[];
+}
+
+/** Per-application report facets, keyed by application num. */
+export type FacetIndex = Map<number, ReportFacet>;
+
+export function buildFacetIndex(facets: ReportFacet[]): FacetIndex {
+  return new Map(facets.map((f) => [f.num, f]));
+}
+
+/**
+ * Reduce a raw archetype string to short, filterable families:
+ * `"Frontend Engineer (React/Next.js) + Design Engineer (UI/Motion)"` →
+ * `["Frontend Engineer", "Design Engineer"]`. Raw archetypes are free prose
+ * (parentheticals, em-dash qualifiers, `+` combinations), so exact-match
+ * filtering on them would explode the option list.
+ */
+export function archetypeFamilies(raw: string | null): string[] {
+  if (!raw) return [];
+  return raw
+    .split(/\s*\+\s*(?![^(]*\))/) // split `+` combinations, not inside parens
+    .map((part) =>
+      part
+        .replace(/\([^)]*\)/g, " ") // drop parentheticals
+        .replace(/\[[^\]]*\]/g, " ") // drop bracketed qualifiers
+        .split(/\s*(?:—|--|:|,)\s*/)[0] // drop qualifiers after dash/colon
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .filter((s) => s.length > 1);
 }
 
 /** Canonical dashboard groups hidden by default on the board (Decision 8). */
@@ -42,6 +74,8 @@ export const EMPTY_FILTERS: AppFilters = {
   dateFrom: null,
   dateTo: null,
   archived: false,
+  archetypes: [],
+  vendors: [],
 };
 
 /** An app is archived when its canonical group is Rejected / Discarded / SKIP. */
@@ -57,7 +91,9 @@ export function hasActiveFilters(f: AppFilters): boolean {
     f.scoreMin !== null ||
     f.scoreMax !== null ||
     f.dateFrom !== null ||
-    f.dateTo !== null
+    f.dateTo !== null ||
+    f.archetypes.length > 0 ||
+    f.vendors.length > 0
   );
 }
 
@@ -75,20 +111,25 @@ function parseDate(value: string | null): string | null {
   return DATE_RE.test(t) ? t : null;
 }
 
-/** URL search params → typed filters. Tolerant of missing / malformed values. */
-export function parseFilters(params: URLSearchParams): AppFilters {
-  const statuses = (params.get("status") ?? "")
+function parseList(value: string | null): string[] {
+  return (value ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+}
+
+/** URL search params → typed filters. Tolerant of missing / malformed values. */
+export function parseFilters(params: URLSearchParams): AppFilters {
   return {
     q: params.get("q") ?? "",
-    statuses,
+    statuses: parseList(params.get("status")),
     scoreMin: parseNumber(params.get("smin")),
     scoreMax: parseNumber(params.get("smax")),
     dateFrom: parseDate(params.get("from")),
     dateTo: parseDate(params.get("to")),
     archived: params.get("archived") === "1",
+    archetypes: parseList(params.get("arch")),
+    vendors: parseList(params.get("vendor")),
   };
 }
 
@@ -112,11 +153,19 @@ export function applyFiltersToParams(
   set("from", f.dateFrom);
   set("to", f.dateTo);
   set("archived", f.archived ? "1" : null);
+  set("arch", f.archetypes.length > 0 ? f.archetypes.join(",") : null);
+  set("vendor", f.vendors.length > 0 ? f.vendors.join(",") : null);
   return next;
 }
 
-/** AND-composed predicate. `archived` hides Rejected/Discarded/SKIP unless on. */
-export function matchesFilters(app: Application, f: AppFilters): boolean {
+/** AND-composed predicate. `archived` hides Rejected/Discarded/SKIP unless on.
+ * `facets` powers the archetype/vendor filters; when one of those is active
+ * and the app has no report facet, the app does not match. */
+export function matchesFilters(
+  app: Application,
+  f: AppFilters,
+  facets?: FacetIndex,
+): boolean {
   if (!f.archived && isArchived(app)) return false;
 
   if (f.q.trim() !== "") {
@@ -138,6 +187,16 @@ export function matchesFilters(app: Application, f: AppFilters): boolean {
   if (f.dateFrom !== null && app.date < f.dateFrom) return false;
   if (f.dateTo !== null && app.date > f.dateTo) return false;
 
+  if (f.archetypes.length > 0) {
+    const families = archetypeFamilies(facets?.get(app.num)?.archetype ?? null);
+    if (!families.some((fam) => f.archetypes.includes(fam))) return false;
+  }
+
+  if (f.vendors.length > 0) {
+    const vendor = facets?.get(app.num)?.atsVendor ?? null;
+    if (vendor === null || !f.vendors.includes(vendor)) return false;
+  }
+
   return true;
 }
 
@@ -145,6 +204,7 @@ export function matchesFilters(app: Application, f: AppFilters): boolean {
 export function filterApplications(
   applications: Application[],
   f: AppFilters,
+  facets?: FacetIndex,
 ): Application[] {
-  return applications.filter((app) => matchesFilters(app, f));
+  return applications.filter((app) => matchesFilters(app, f, facets));
 }

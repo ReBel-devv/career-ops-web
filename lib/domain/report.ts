@@ -2,8 +2,11 @@ import { z } from "zod";
 
 /**
  * Evaluation report — `reports/{NNN}-{slug}-{YYYY-MM-DD}.md`.
- * Header key-values + `## Machine Summary` YAML block + Blocks A–G prose.
- * Full parser lands in M3; the contract is fixed here.
+ * Header key-values + `## Machine Summary` YAML block + `## Score Global`
+ * table + Blocks A–G prose. Reports are French prose; the UI chrome stays
+ * English (plan Decision 3). Everything degrades gracefully: a report with no
+ * Machine Summary, no Score Global, or no lettered blocks still parses (F2 AC).
+ * The parser itself lives in `lib/parsers/report.ts`.
  */
 
 /** `## Machine Summary` fenced YAML. Fields vary per report → all optional,
@@ -27,7 +30,9 @@ export const machineSummarySchema = z.looseObject({
 
 export type MachineSummary = z.infer<typeof machineSummarySchema>;
 
-/** `**Key:** value` header lines between the title and the first `##`. */
+/** `**Key:** value` header lines between the title and the first `##`. Key
+ * labels are accent/language-tolerant (Archetype / Arquetipo / Archétype …)
+ * and normalized to these canonical fields; `extras` keeps the raw map. */
 export const reportHeaderSchema = z.object({
   date: z.string().optional(),
   archetype: z.string().optional(),
@@ -36,9 +41,46 @@ export const reportHeaderSchema = z.object({
   verification: z.string().optional(),
   url: z.string().optional(),
   pdf: z.string().optional(),
+  batchId: z.string().optional(),
+  /** Any header key we didn't map, keyed by its normalized (accent-stripped) label. */
+  extras: z.record(z.string(), z.string()).default({}),
 });
 
 export type ReportHeader = z.infer<typeof reportHeaderSchema>;
+
+/** One row of the `## Score Global` table. */
+export const scoreRowSchema = z.object({
+  dimension: z.string(),
+  score: z.string(),
+  comment: z.string(),
+});
+
+export type ScoreRow = z.infer<typeof scoreRowSchema>;
+
+export const scoreGlobalSchema = z.object({
+  rows: z.array(scoreRowSchema),
+  /** The `**Global**` summary row, when present. */
+  global: scoreRowSchema.nullable(),
+});
+
+export type ScoreGlobal = z.infer<typeof scoreGlobalSchema>;
+
+/** A `## ` section of the report body (Machine Summary + Score Global are
+ * lifted into their own fields and excluded here). `letter` is A–G (or a
+ * range like `E-F`) when the heading is a lettered block, else null. */
+export const reportBlockSchema = z.object({
+  /** Detected block letter(s), e.g. `A`, `G`, `E-F`; null for unlettered sections. */
+  letter: z.string().nullable(),
+  /** Heading text without the leading `## `. */
+  title: z.string(),
+  /** Section markdown (heading line included) for rendering. */
+  markdown: z.string(),
+});
+
+export type ReportBlock = z.infer<typeof reportBlockSchema>;
+
+export const locationBucketSchema = z.enum(["EU", "US", "Remote", "Other"]);
+export type LocationBucket = z.infer<typeof locationBucketSchema>;
 
 export const reportSchema = z.object({
   num: z.number().int().nonnegative(),
@@ -48,8 +90,30 @@ export const reportSchema = z.object({
   header: reportHeaderSchema,
   /** Null when the report has no parseable Machine Summary (graceful fallback). */
   machineSummary: machineSummarySchema.nullable(),
-  /** Full raw markdown (Blocks A–G) for client-side rendering. */
+  /** Null when the report has no parseable Score Global table. */
+  scoreGlobal: scoreGlobalSchema.nullable(),
+  /** Body sections (Blocks A–G + any other `## ` sections), in file order. */
+  blocks: z.array(reportBlockSchema),
+  /** Full raw markdown for a render fallback when block splitting finds nothing. */
   markdown: z.string(),
+  /** ATS vendor derived from the posting URL host (Lever / Greenhouse / Ashby / …). */
+  atsVendor: z.string().nullable(),
+  /** Coarse location bucket derived from the Machine Summary / header. */
+  locationBucket: locationBucketSchema.nullable(),
 });
 
 export type Report = z.infer<typeof reportSchema>;
+
+/**
+ * Lightweight per-application facets derived from a report, used to power the
+ * archetype / ATS-vendor / location filters (F4) without shipping the whole
+ * report body to the client. M5 reuses these for archetype/vendor aggregates.
+ */
+export const reportFacetSchema = z.object({
+  num: z.number().int().nonnegative(),
+  archetype: z.string().nullable(),
+  atsVendor: z.string().nullable(),
+  locationBucket: locationBucketSchema.nullable(),
+});
+
+export type ReportFacet = z.infer<typeof reportFacetSchema>;

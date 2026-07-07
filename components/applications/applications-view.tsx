@@ -5,9 +5,9 @@ import { useSearchParams } from "next/navigation";
 import { ApplicationsTable } from "@/components/applications/applications-table";
 import { FilterBar } from "@/components/filters/filter-bar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useApplications, useStates } from "@/lib/client/queries";
+import { useApplications, useReportFacets, useStates } from "@/lib/client/queries";
 import { useMutationsEnabled } from "@/components/providers/app-providers";
-import { filterApplications, parseFilters } from "@/lib/filters";
+import { buildFacetIndex, filterApplications, parseFilters } from "@/lib/filters";
 
 /**
  * Client Applications view — reads the same shared query cache and URL filters
@@ -23,11 +23,19 @@ export function ApplicationsView() {
 
   const appsQuery = useApplications();
   const statesQuery = useStates();
+  const facetsQuery = useReportFacets();
   const mutationsEnabled = useMutationsEnabled();
 
   const filtered = useMemo(
-    () => (appsQuery.data ? filterApplications(appsQuery.data, filters) : []),
-    [appsQuery.data, filters],
+    () =>
+      appsQuery.data
+        ? filterApplications(
+            appsQuery.data,
+            filters,
+            buildFacetIndex(facetsQuery.data ?? []),
+          )
+        : [],
+    [appsQuery.data, facetsQuery.data, filters],
   );
 
   if (appsQuery.isError) {
