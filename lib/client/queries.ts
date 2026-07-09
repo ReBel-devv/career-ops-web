@@ -13,6 +13,7 @@ import {
   documentSchema,
   followUpCadenceSchema,
   followUpDataSchema,
+  outreachContactSchema,
   patternsResultSchema,
   pipelineItemSchema,
   reportFacetSchema,
@@ -23,6 +24,10 @@ import {
   type Document,
   type FollowUpCadence,
   type FollowUpData,
+  type OutreachContact,
+  type OutreachContactKind,
+  type OutreachRecord,
+  type OutreachStage,
   type PatternsResult,
   type PipelineItem,
   type Report,
@@ -383,6 +388,195 @@ export function useApplicationActions() {
       mutation.mutate({ kind: "notes", app, notes });
     },
     isPending: mutation.isPending,
+  };
+}
+
+/* ------------------------------------------------------- Outreach (M6) --- */
+
+export const outreachKey = ["outreach"] as const;
+
+const outreachRecordsResponse = z.object({
+  records: z.array(
+    z.object({
+      appNum: z.number().int().positive(),
+      contacts: z.array(outreachContactSchema),
+    }),
+  ),
+});
+
+const outreachMutationResponse = z.object({
+  appNum: z.number().int().positive(),
+  contacts: z.array(outreachContactSchema),
+  contact: outreachContactSchema.optional(),
+});
+
+/** All outreach contacts grouped per application (board indicator + panel). */
+export function useOutreach() {
+  return useQuery({
+    queryKey: outreachKey,
+    queryFn: async (): Promise<OutreachRecord[]> => {
+      const json = await fetchJson("/api/outreach");
+      return outreachRecordsResponse.parse(json).records;
+    },
+  });
+}
+
+export interface AddOutreachContactArgs {
+  kind: OutreachContactKind;
+  name: string;
+  linkedin?: string;
+  companyRole?: string;
+  stage?: OutreachStage;
+  date?: string;
+  notes?: string;
+}
+
+export interface EditOutreachContactArgs {
+  kind?: OutreachContactKind;
+  name?: string;
+  linkedin?: string | null;
+  companyRole?: string | null;
+  notes?: string | null;
+}
+
+async function outreachRequest(
+  url: string,
+  method: "POST" | "PATCH" | "DELETE",
+  body?: Record<string, unknown>,
+) {
+  const res = await fetch(url, {
+    method,
+    headers: body ? { "content-type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = (await res.json().catch(() => ({}))) as { error?: string };
+  if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+  return outreachMutationResponse.parse(json);
+}
+
+type OutreachStageVars = {
+  num: number;
+  contact: OutreachContact;
+  stage: OutreachStage;
+  date?: string;
+  isUndo: boolean;
+};
+
+/**
+ * Outreach mutations (add / edit / set-stage / remove). All invalidate the
+ * shared outreach query. Stage moves get an undo toast (M2 pattern): undo sets
+ * the stage back to what it was, re-stamping its original date. Stage-date
+ * stamps are non-destructive, so undo after an advance leaves the advanced
+ * stage's date in `stageDates` — harmless, and the current stage is restored.
+ */
+export function useOutreachActions() {
+  const qc = useQueryClient();
+  const invalidate = () => void qc.invalidateQueries({ queryKey: outreachKey });
+
+  const add = useMutation({
+    mutationFn: ({ num, ...body }: { num: number } & AddOutreachContactArgs) =>
+      outreachRequest(`/api/outreach/${num}`, "POST", { ...body }),
+    onSuccess: (data) => {
+      invalidate();
+      toast.success(`Contact ${data.contact?.name ?? ""} added`);
+    },
+    onError: (error) =>
+      toast.error("Couldn't add the contact", {
+        description: error instanceof Error ? error.message : String(error),
+      }),
+  });
+
+  const setStage = useMutation({
+    mutationFn: (vars: OutreachStageVars) =>
+      outreachRequest(`/api/outreach/${vars.num}/${vars.contact.id}`, "PATCH", {
+        stage: vars.stage,
+        ...(vars.date ? { date: vars.date } : {}),
+      }),
+    onSuccess: (data, vars) => {
+      invalidate();
+      const prevStage = vars.contact.stage;
+      const prevDate = vars.contact.stageDates[prevStage];
+      toast.success(`${vars.contact.name} → ${vars.stage}`, {
+        action:
+          !vars.isUndo && prevStage !== vars.stage
+            ? {
+                label: "Undo",
+                onClick: () =>
+                  setStage.mutate({
+                    num: vars.num,
+                    contact: data.contact ?? vars.contact,
+                    stage: prevStage,
+                    ...(prevDate ? { date: prevDate } : {}),
+                    isUndo: true,
+                  }),
+              }
+            : undefined,
+      });
+    },
+    onError: (error, vars) =>
+      toast.error(`Couldn't update ${vars.contact.name}`, {
+        description: error instanceof Error ? error.message : String(error),
+      }),
+  });
+
+  const edit = useMutation({
+    mutationFn: ({
+      num,
+      contactId,
+      ...body
+    }: { num: number; contactId: string } & EditOutreachContactArgs) =>
+      outreachRequest(`/api/outreach/${num}/${contactId}`, "PATCH", { ...body }),
+    onSuccess: (data) => {
+      invalidate();
+      toast.success(`Contact ${data.contact?.name ?? ""} updated`);
+    },
+    onError: (error) =>
+      toast.error("Couldn't update the contact", {
+        description: error instanceof Error ? error.message : String(error),
+      }),
+  });
+
+  const remove = useMutation({
+    mutationFn: ({ num, contactId }: { num: number; contactId: string }) =>
+      outreachRequest(`/api/outreach/${num}/${contactId}`, "DELETE"),
+    onSuccess: () => {
+      invalidate();
+      toast.success("Contact removed");
+    },
+    onError: (error) =>
+      toast.error("Couldn't remove the contact", {
+        description: error instanceof Error ? error.message : String(error),
+      }),
+  });
+
+  return {
+    addContact(num: number, args: AddOutreachContactArgs) {
+      add.mutate({ num, ...args });
+    },
+    /** Set a contact's stage (any direction — no illegal-move blocking). */
+    setStage(
+      num: number,
+      contact: OutreachContact,
+      stage: OutreachStage,
+      opts?: { date?: string; isUndo?: boolean },
+    ) {
+      if (contact.stage === stage && !opts?.date) return;
+      setStage.mutate({
+        num,
+        contact,
+        stage,
+        ...(opts?.date ? { date: opts.date } : {}),
+        isUndo: opts?.isUndo ?? false,
+      });
+    },
+    editContact(num: number, contactId: string, args: EditOutreachContactArgs) {
+      edit.mutate({ num, contactId, ...args });
+    },
+    removeContact(num: number, contactId: string) {
+      remove.mutate({ num, contactId });
+    },
+    isPending:
+      add.isPending || setStage.isPending || edit.isPending || remove.isPending,
   };
 }
 

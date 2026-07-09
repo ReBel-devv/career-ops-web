@@ -30,3 +30,23 @@ export {
   type AppendFollowUpLogResult,
   type FollowUpWriteErrorCode,
 } from "./follow-up-writer";
+export {
+  acquireOutreachLock,
+  outreachLockDirFor,
+  outreachPathFor,
+  OutreachLockTimeoutError,
+  type OutreachLockHandle,
+  type OutreachLockOptions,
+} from "./outreach-lock";
+export {
+  addOutreachContact,
+  applyAddContact,
+  applyDeleteContact,
+  applyUpdateContact,
+  deleteOutreachContact,
+  OutreachWriteError,
+  parseOutreachDoc,
+  serializeOutreachDoc,
+  updateOutreachContact,
+  type OutreachWriteErrorCode,
+} from "./outreach-writer";

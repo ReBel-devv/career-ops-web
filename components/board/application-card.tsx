@@ -3,9 +3,10 @@
 import Link from "next/link";
 import * as React from "react";
 import { forwardRef, type ReactNode } from "react";
-import { AlertTriangle, FileText } from "lucide-react";
+import { AlertTriangle, FileText, UsersRound } from "lucide-react";
 import { ScoreBadge } from "@/components/data/score-badge";
 import { STATUS_BORDER_CLASS } from "@/components/data/status-indicator";
+import { STAGE_LABELS, type OutreachCardHint } from "@/lib/outreach-view";
 import type { Application } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
@@ -25,12 +26,14 @@ export interface ApplicationCardProps
   action?: ReactNode;
   /** M4 seam — follow-up past its pinned date. */
   overdue?: boolean;
+  /** M6 — outreach presence hint (contact count + furthest stage). */
+  outreach?: OutreachCardHint;
   dragging?: boolean;
 }
 
 export const ApplicationCard = forwardRef<HTMLDivElement, ApplicationCardProps>(
   function ApplicationCard(
-    { app, action, overdue = false, dragging = false, className, ...rest },
+    { app, action, overdue = false, outreach, dragging = false, className, ...rest },
     ref,
   ) {
     return (
@@ -77,9 +80,24 @@ export const ApplicationCard = forwardRef<HTMLDivElement, ApplicationCardProps>(
           <span className="font-mono text-xs tabular-nums text-muted-foreground">
             {app.date}
           </span>
+          {outreach ? (
+            <span
+              className="ml-auto inline-flex items-center gap-0.5 text-muted-foreground"
+              title={`${outreach.count} outreach contact${outreach.count > 1 ? "s" : ""} — furthest stage: ${STAGE_LABELS[outreach.topStage]}`}
+              aria-label={`${outreach.count} outreach contacts, furthest stage ${STAGE_LABELS[outreach.topStage]}`}
+            >
+              <UsersRound className="size-3" aria-hidden />
+              <span className="font-mono text-[10px] tabular-nums">
+                {outreach.count}
+              </span>
+            </span>
+          ) : null}
           {app.hasPdf ? (
             <FileText
-              className="ml-auto size-3.5 text-muted-foreground"
+              className={cn(
+                "size-3.5 text-muted-foreground",
+                !outreach && "ml-auto",
+              )}
               aria-label="CV PDF generated"
             />
           ) : null}

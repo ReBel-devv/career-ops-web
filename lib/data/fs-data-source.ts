@@ -7,13 +7,17 @@ import {
   parseReportCell,
   parseScoreCell,
   scanRecordSchema,
+  type AddOutreachContactInput,
   type Application,
   type CanonicalState,
+  type DeleteOutreachContactInput,
   type Document,
   type FollowUpCadence,
   type FollowUpData,
   type FollowUpWriteResult,
   type LogFollowUpInput,
+  type OutreachMutationResult,
+  type OutreachRecord,
   type PatternsResult,
   type PipelineItem,
   type Report,
@@ -22,6 +26,7 @@ import {
   type ScanRecord,
   type UpdateApplicationInput,
   type UpdateApplicationResult,
+  type UpdateOutreachContactInput,
 } from "@/lib/domain";
 import { getConfig } from "@/lib/config";
 import { parseReport, reportFacet } from "@/lib/parsers/report";
@@ -36,9 +41,14 @@ import {
   runTrackerSync,
 } from "@/lib/scripts";
 import {
+  addOutreachContact,
   appendFollowUpLog,
+  deleteOutreachContact,
   FollowUpWriteError,
+  OutreachWriteError,
+  parseOutreachDoc,
   TrackerWriteError,
+  updateOutreachContact,
   writeTrackerCell,
 } from "@/lib/writers";
 import type { DataSource } from "./data-source";
@@ -271,6 +281,62 @@ export class FsDataSource implements DataSource {
       notes: input.notes,
     });
     return { ok: true, date, kind: "log", num };
+  }
+
+  /* --------------------------------------------------- Outreach (M6) --- */
+
+  /** All outreach contacts from data/outreach.yml (missing/empty file → []). */
+  async getOutreach(): Promise<OutreachRecord[]> {
+    let content: string;
+    try {
+      content = await fs.readFile(this.resolve("data", "outreach.yml"), "utf8");
+    } catch (error: unknown) {
+      if (isNotFound(error)) return [];
+      throw error;
+    }
+    const doc = parseOutreachDoc(content);
+    return Object.entries(doc.applications)
+      .map(([num, contacts]) => ({ appNum: Number(num), contacts }))
+      .filter((r) => Number.isInteger(r.appNum) && r.contacts.length > 0)
+      .sort((a, b) => a.appNum - b.appNum);
+  }
+
+  /** READ_ONLY guard + tracker-existence check shared by outreach mutations. */
+  private async guardOutreachWrite(appNum: number): Promise<void> {
+    if (getConfig().readOnly) {
+      throw new OutreachWriteError(
+        "READ_ONLY",
+        "READ_ONLY is set — all mutations are disabled.",
+      );
+    }
+    const app = (await this.getApplications()).find((a) => a.num === appNum);
+    if (!app) {
+      throw new OutreachWriteError(
+        "NOT_FOUND",
+        `Application #${appNum} not found in the tracker.`,
+      );
+    }
+  }
+
+  async addOutreachContact(
+    input: AddOutreachContactInput,
+  ): Promise<OutreachMutationResult> {
+    await this.guardOutreachWrite(input.appNum);
+    return addOutreachContact(this.repoPath, input);
+  }
+
+  async updateOutreachContact(
+    input: UpdateOutreachContactInput,
+  ): Promise<OutreachMutationResult> {
+    await this.guardOutreachWrite(input.appNum);
+    return updateOutreachContact(this.repoPath, input);
+  }
+
+  async deleteOutreachContact(
+    input: DeleteOutreachContactInput,
+  ): Promise<OutreachMutationResult> {
+    await this.guardOutreachWrite(input.appNum);
+    return deleteOutreachContact(this.repoPath, input);
   }
 
   /** Discovery inbox — read-only parse of data/pipeline.md (plan §4.4). */

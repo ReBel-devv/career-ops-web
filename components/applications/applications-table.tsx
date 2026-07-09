@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, FileText } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, FileText, UsersRound } from "lucide-react";
 import { StatusSelect } from "@/components/applications/status-select";
 import { ScoreBadge } from "@/components/data/score-badge";
 import { STATUS_BORDER_CLASS, StatusIndicator } from "@/components/data/status-indicator";
@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { STAGE_LABELS, type OutreachCardHint } from "@/lib/outreach-view";
 import type { Application, CanonicalState } from "@/lib/domain";
 import { cn } from "@/lib/utils";
 
@@ -33,12 +34,15 @@ export function ApplicationsTable({
   applications,
   states = [],
   readOnly = false,
+  outreachByNum,
 }: {
   applications: Application[];
   /** Canonical states for the inline status editor; empty = render read-only. */
   states?: CanonicalState[];
   /** READ_ONLY mode — render the plain indicator, no write affordances. */
   readOnly?: boolean;
+  /** M6 — outreach presence hints (contact count + furthest stage) per app. */
+  outreachByNum?: Map<number, OutreachCardHint>;
 }) {
   const editable = !readOnly && states.length > 0;
   const [sortKey, setSortKey] = useState<SortKey>("date");
@@ -101,7 +105,21 @@ export function ApplicationsTable({
                 <TableCell className="font-mono tabular-nums text-muted-foreground">
                   {String(app.num).padStart(3, "0")}
                 </TableCell>
-                <TableCell className="font-medium whitespace-nowrap">{app.company}</TableCell>
+                <TableCell className="font-medium whitespace-nowrap">
+                  {app.company}
+                  {outreachByNum?.has(app.num) ? (
+                    <span
+                      className="ml-1.5 inline-flex items-center gap-0.5 align-middle text-muted-foreground"
+                      title={`${outreachByNum.get(app.num)!.count} outreach contact${outreachByNum.get(app.num)!.count > 1 ? "s" : ""} — furthest stage: ${STAGE_LABELS[outreachByNum.get(app.num)!.topStage]}`}
+                      aria-label={`${outreachByNum.get(app.num)!.count} outreach contacts, furthest stage ${STAGE_LABELS[outreachByNum.get(app.num)!.topStage]}`}
+                    >
+                      <UsersRound className="size-3" aria-hidden />
+                      <span className="font-mono text-[10px] tabular-nums">
+                        {outreachByNum.get(app.num)!.count}
+                      </span>
+                    </span>
+                  ) : null}
+                </TableCell>
                 <TableCell className="max-w-56 truncate" title={app.role}>
                   {app.role}
                 </TableCell>

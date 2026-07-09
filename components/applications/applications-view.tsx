@@ -5,9 +5,15 @@ import { useSearchParams } from "next/navigation";
 import { ApplicationsTable } from "@/components/applications/applications-table";
 import { FilterBar } from "@/components/filters/filter-bar";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useApplications, useReportFacets, useStates } from "@/lib/client/queries";
+import {
+  useApplications,
+  useOutreach,
+  useReportFacets,
+  useStates,
+} from "@/lib/client/queries";
 import { useMutationsEnabled } from "@/components/providers/app-providers";
 import { buildFacetIndex, filterApplications, parseFilters } from "@/lib/filters";
+import { outreachHints } from "@/lib/outreach-view";
 
 /**
  * Client Applications view — reads the same shared query cache and URL filters
@@ -24,7 +30,13 @@ export function ApplicationsView() {
   const appsQuery = useApplications();
   const statesQuery = useStates();
   const facetsQuery = useReportFacets();
+  const outreachQuery = useOutreach();
   const mutationsEnabled = useMutationsEnabled();
+
+  const outreachByNum = useMemo(
+    () => outreachHints(outreachQuery.data ?? []),
+    [outreachQuery.data],
+  );
 
   const filtered = useMemo(
     () =>
@@ -71,6 +83,7 @@ export function ApplicationsView() {
           applications={filtered}
           states={statesQuery.data ?? []}
           readOnly={!mutationsEnabled}
+          outreachByNum={outreachByNum}
         />
       )}
     </div>

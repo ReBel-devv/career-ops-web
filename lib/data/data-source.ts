@@ -1,11 +1,15 @@
 import type {
+  AddOutreachContactInput,
   Application,
   CanonicalState,
+  DeleteOutreachContactInput,
   Document,
   FollowUpCadence,
   FollowUpData,
   FollowUpWriteResult,
   LogFollowUpInput,
+  OutreachMutationResult,
+  OutreachRecord,
   PatternsResult,
   PipelineItem,
   Report,
@@ -14,6 +18,7 @@ import type {
   ScanRecord,
   UpdateApplicationInput,
   UpdateApplicationResult,
+  UpdateOutreachContactInput,
 } from "@/lib/domain";
 
 /**
@@ -70,4 +75,21 @@ export interface DataSource {
    * Log that a follow-up was sent — appends one table row to
    * data/follow-ups.md (never edits existing lines; re-parse gated). (M4) */
   logFollowUp(input: LogFollowUpInput): Promise<FollowUpWriteResult>;
+  /** All outreach contacts, grouped per application (data/outreach.yml). (M6) */
+  getOutreach(): Promise<OutreachRecord[]>;
+  /**
+   * Outreach mutations — locked atomic read-modify-write of data/outreach.yml,
+   * whole-document zod validation + re-parse gate. Stage moves are
+   * unrestricted (forward, skip, regress — Decision 5 spirit); setting a stage
+   * stamps its date. Throws `OutreachWriteError`
+   * (INVALID_INPUT/READ_ONLY/NOT_FOUND/LOCK_TIMEOUT/PARSE_FAILED). (M6) */
+  addOutreachContact(
+    input: AddOutreachContactInput,
+  ): Promise<OutreachMutationResult>;
+  updateOutreachContact(
+    input: UpdateOutreachContactInput,
+  ): Promise<OutreachMutationResult>;
+  deleteOutreachContact(
+    input: DeleteOutreachContactInput,
+  ): Promise<OutreachMutationResult>;
 }

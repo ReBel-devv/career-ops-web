@@ -11,6 +11,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import type { OutreachCardHint } from "@/lib/outreach-view";
 import type { Application, CanonicalState } from "@/lib/domain";
 import type { BoardColumn } from "@/lib/grouping";
 import { cn } from "@/lib/utils";
@@ -26,12 +27,14 @@ export function MobileBoard({
   onMove,
   disabled = false,
   overdueNums,
+  outreachByNum,
 }: {
   columns: BoardColumn[];
   states: CanonicalState[];
   onMove: (app: Application, statusId: string) => void;
   disabled?: boolean;
   overdueNums?: Set<number>;
+  outreachByNum?: Map<number, OutreachCardHint>;
 }) {
   const [selected, setSelected] = useState(columns[0]?.state.id ?? "");
   const [moveTarget, setMoveTarget] = useState<Application | null>(null);
@@ -85,6 +88,7 @@ export function MobileBoard({
               key={app.num}
               app={app}
               overdue={overdueNums?.has(app.num) ?? false}
+              outreach={outreachByNum?.get(app.num)}
               action={
                 <button
                   type="button"

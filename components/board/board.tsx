@@ -6,6 +6,7 @@ import {
   useApplications,
   useApplicationActions,
   useFollowUpCadence,
+  useOutreach,
   useReportFacets,
   useStates,
 } from "@/lib/client/queries";
@@ -16,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { buildFacetIndex, filterApplications, parseFilters } from "@/lib/filters";
 import { groupApplications, visibleColumns } from "@/lib/grouping";
 import { overdueAppNums } from "@/lib/follow-ups-view";
+import { outreachHints } from "@/lib/outreach-view";
 import type { Application } from "@/lib/domain";
 
 /**
@@ -36,12 +38,18 @@ export function Board() {
   const statesQuery = useStates();
   const facetsQuery = useReportFacets();
   const cadenceQuery = useFollowUpCadence();
+  const outreachQuery = useOutreach();
   const actions = useApplicationActions();
   const mutationsEnabled = useMutationsEnabled();
 
   const overdueNums = useMemo(
     () => (cadenceQuery.data ? overdueAppNums(cadenceQuery.data) : new Set<number>()),
     [cadenceQuery.data],
+  );
+
+  const outreachByNum = useMemo(
+    () => outreachHints(outreachQuery.data ?? []),
+    [outreachQuery.data],
   );
 
   const board = useMemo(() => {
@@ -93,6 +101,7 @@ export function Board() {
           onMove={onMove}
           disabled={!mutationsEnabled}
           overdueNums={overdueNums}
+          outreachByNum={outreachByNum}
         />
       </div>
       <div className="md:hidden">
@@ -102,6 +111,7 @@ export function Board() {
           onMove={onMove}
           disabled={!mutationsEnabled}
           overdueNums={overdueNums}
+          outreachByNum={outreachByNum}
         />
       </div>
     </>

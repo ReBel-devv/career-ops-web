@@ -1,11 +1,14 @@
 import {
   applicationSchema,
+  OUTREACH_SCHEMA_VERSION,
   patternsSchema,
   scanRecordSchema,
   statesFileSchema,
+  type AddOutreachContactInput,
   type Application,
   type CanonicalState,
   type CadenceEntry,
+  type DeleteOutreachContactInput,
   type Document,
   type FollowUpCadence,
   type FollowUpData,
@@ -13,6 +16,9 @@ import {
   type FollowUpUrgency,
   type FollowUpWriteResult,
   type LogFollowUpInput,
+  type OutreachDoc,
+  type OutreachMutationResult,
+  type OutreachRecord,
   type PatternsResult,
   type PipelineItem,
   type Report,
@@ -21,9 +27,14 @@ import {
   type ScanRecord,
   type UpdateApplicationInput,
   type UpdateApplicationResult,
+  type UpdateOutreachContactInput,
 } from "@/lib/domain";
 import {
+  applyAddContact,
+  applyDeleteContact,
+  applyUpdateContact,
   FollowUpWriteError,
+  OutreachWriteError,
   resolveWritableStatus,
   sanitizeNotes,
   TrackerWriteError,
@@ -89,6 +100,61 @@ const demoOverrides = new Map<number, { statusId?: string; notes?: string }>();
  */
 const demoPins = new Map<number, { date: string; setDate: string }>();
 const demoLogs: FollowUpLog[] = [];
+
+/**
+ * In-memory outreach document (Decision 6). Mutated through the SAME pure
+ * `applyAddContact`/`applyUpdateContact`/`applyDeleteContact` functions the FS
+ * writer uses, so demo and real modes exercise one mutation code path. Seeded
+ * with two invented contacts so the panel + card indicator render out of the
+ * box; resets on server restart.
+ */
+let demoOutreach: OutreachDoc = {
+  version: OUTREACH_SCHEMA_VERSION,
+  applications: {
+    "1": [
+      {
+        id: "c_demo0001",
+        kind: "recruiter",
+        name: "Maya Lindqvist",
+        linkedin: "https://www.linkedin.com/in/maya-lindqvist-demo",
+        companyRole: "Technical Recruiter",
+        stage: "messaged",
+        stageDates: {
+          identified: "2026-06-03",
+          requested: "2026-06-04",
+          accepted: "2026-06-06",
+          messaged: "2026-06-07",
+        },
+        notes: "Warm reply on the intro thread.",
+      },
+      {
+        id: "c_demo0002",
+        kind: "hiring-manager",
+        name: "Jonas Reber",
+        companyRole: "Engineering Manager, Web Platform",
+        stage: "identified",
+        stageDates: { identified: "2026-06-05" },
+      },
+    ],
+    "4": [
+      {
+        id: "c_demo0003",
+        kind: "founder",
+        name: "Priya Natarajan",
+        linkedin: "https://www.linkedin.com/in/priya-natarajan-demo",
+        stage: "replied",
+        stageDates: {
+          identified: "2026-06-10",
+          requested: "2026-06-10",
+          accepted: "2026-06-11",
+          messaged: "2026-06-12",
+          replied: "2026-06-14",
+        },
+        notes: "Asked for the portfolio link — sent it.",
+      },
+    ],
+  },
+};
 
 /** Days since application, keyed by demo app num — drives dynamic cadence dates
  * so the demo calendar never goes stale (one overdue, one upcoming). */
@@ -317,6 +383,63 @@ export class DemoDataSource implements DataSource {
       notes: sanitizeNotes(input.notes ?? ""),
     });
     return { ok: true, date, kind: "log", num };
+  }
+
+  /* --------------------------------------------------- Outreach (M6) --- */
+
+  async getOutreach(): Promise<OutreachRecord[]> {
+    return Object.entries(demoOutreach.applications)
+      .map(([num, contacts]) => ({ appNum: Number(num), contacts }))
+      .filter((r) => r.contacts.length > 0)
+      .sort((a, b) => a.appNum - b.appNum);
+  }
+
+  private async assertDemoApp(appNum: number): Promise<void> {
+    const app = (await this.getApplications()).find((a) => a.num === appNum);
+    if (!app) {
+      throw new OutreachWriteError(
+        "NOT_FOUND",
+        `Application #${appNum} not found in the demo dataset.`,
+      );
+    }
+  }
+
+  async addOutreachContact(
+    input: AddOutreachContactInput,
+  ): Promise<OutreachMutationResult> {
+    await this.assertDemoApp(input.appNum);
+    const { doc, contact } = applyAddContact(demoOutreach, input);
+    demoOutreach = doc;
+    return {
+      appNum: input.appNum,
+      contacts: doc.applications[String(input.appNum)] ?? [],
+      contact,
+    };
+  }
+
+  async updateOutreachContact(
+    input: UpdateOutreachContactInput,
+  ): Promise<OutreachMutationResult> {
+    await this.assertDemoApp(input.appNum);
+    const { doc, contact } = applyUpdateContact(demoOutreach, input);
+    demoOutreach = doc;
+    return {
+      appNum: input.appNum,
+      contacts: doc.applications[String(input.appNum)] ?? [],
+      contact,
+    };
+  }
+
+  async deleteOutreachContact(
+    input: DeleteOutreachContactInput,
+  ): Promise<OutreachMutationResult> {
+    await this.assertDemoApp(input.appNum);
+    const { doc } = applyDeleteContact(demoOutreach, input);
+    demoOutreach = doc;
+    return {
+      appNum: input.appNum,
+      contacts: doc.applications[String(input.appNum)] ?? [],
+    };
   }
 
   async getPipelineItems(): Promise<PipelineItem[]> {

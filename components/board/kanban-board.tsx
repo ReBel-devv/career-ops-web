@@ -20,6 +20,7 @@ import { ApplicationCard } from "@/components/board/application-card";
 import { MoveStatusMenu } from "@/components/board/move-status-menu";
 import { STATUS_DOT_CLASS } from "@/components/data/status-indicator";
 import { usePrefersReducedMotion } from "@/lib/client/use-reduced-motion";
+import type { OutreachCardHint } from "@/lib/outreach-view";
 import type { Application, CanonicalState } from "@/lib/domain";
 import type { BoardColumn } from "@/lib/grouping";
 import { cn } from "@/lib/utils";
@@ -40,12 +41,14 @@ export function KanbanBoard({
   onMove,
   disabled = false,
   overdueNums,
+  outreachByNum,
 }: {
   columns: BoardColumn[];
   states: CanonicalState[];
   onMove: (app: Application, statusId: string) => void;
   disabled?: boolean;
   overdueNums?: Set<number>;
+  outreachByNum?: Map<number, OutreachCardHint>;
 }) {
   const reducedMotion = usePrefersReducedMotion();
   const [activeApp, setActiveApp] = useState<Application | null>(null);
@@ -113,6 +116,7 @@ export function KanbanBoard({
             onMove={onMove}
             disabled={disabled}
             overdueNums={overdueNums}
+            outreachByNum={outreachByNum}
           />
         ))}
       </div>
@@ -132,12 +136,14 @@ function Column({
   onMove,
   disabled,
   overdueNums,
+  outreachByNum,
 }: {
   column: BoardColumn;
   states: CanonicalState[];
   onMove: (app: Application, statusId: string) => void;
   disabled: boolean;
   overdueNums?: Set<number>;
+  outreachByNum?: Map<number, OutreachCardHint>;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.state.id });
   const dot = STATUS_DOT_CLASS[column.state.dashboardGroup] ?? "bg-muted-foreground/40";
@@ -169,6 +175,7 @@ function Column({
             onMove={onMove}
             disabled={disabled}
             overdue={overdueNums?.has(app.num) ?? false}
+            outreach={outreachByNum?.get(app.num)}
           />
         ))}
         {column.applications.length === 0 ? (
@@ -187,12 +194,14 @@ function DraggableCard({
   onMove,
   disabled,
   overdue,
+  outreach,
 }: {
   app: Application;
   states: CanonicalState[];
   onMove: (app: Application, statusId: string) => void;
   disabled: boolean;
   overdue: boolean;
+  outreach?: OutreachCardHint;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: app.num,
@@ -204,6 +213,7 @@ function DraggableCard({
       ref={setNodeRef}
       app={app}
       overdue={overdue}
+      outreach={outreach}
       dragging={isDragging}
       className={cn(!disabled && "cursor-grab active:cursor-grabbing")}
       style={transform ? { transform: CSS.Translate.toString(transform) } : undefined}

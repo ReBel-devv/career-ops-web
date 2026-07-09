@@ -13,6 +13,7 @@ import {
 import { ScoreBadge } from "@/components/data/score-badge";
 import { StatusIndicator } from "@/components/data/status-indicator";
 import { StatusSelect } from "@/components/applications/status-select";
+import { OutreachPanel } from "@/components/outreach/outreach-panel";
 import { ReportMarkdown } from "@/components/report/report-markdown";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -129,6 +130,8 @@ export function ApplicationDetail({ num }: { num: number }) {
       />
 
       <NotesEditor app={app} editable={editable} />
+
+      <OutreachPanel num={num} />
 
       {app.statusId === "interview" ? <InterviewPrepCard /> : null}
 
