@@ -81,6 +81,43 @@ test("mouse drag moves a card to another column with an undo toast", async ({ pa
   await expect(column(page, "Evaluated").getByText("Quartzworks")).toBeVisible();
 });
 
+test("mouse drag drops into the most-populated column (long-column collision)", async ({
+  page,
+}) => {
+  // Regression for #1: dropping onto a column with many cards used to resolve
+  // to an adjacent shorter column (closestCorners + overflow). Evaluated is the
+  // fullest demo column; pointerWithin must land the card there.
+  await openBoard(page);
+
+  const card = draggableCard(page, "Applied", "Halcyon Grid");
+  await expect(card).toBeVisible();
+  const target = column(page, "Evaluated");
+
+  const from = await card.boundingBox();
+  const to = await target.boundingBox();
+  if (!from || !to) throw new Error("missing bounding boxes");
+
+  await page.mouse.move(from.x + from.width / 2, from.y + from.height - 8);
+  await page.mouse.down();
+  await page.mouse.move(from.x + from.width / 2 - 10, from.y + from.height - 4, { steps: 3 });
+  const live = page.locator("[aria-live='assertive']").first();
+  let over = false;
+  // Sweep across the Evaluated column body (including lower cards) until dnd-kit
+  // announces it as the drop target.
+  for (let y = to.y + 40; y <= to.y + to.height - 20 && !over; y += 60) {
+    await page.mouse.move(to.x + to.width / 2, y, { steps: 4 });
+    await page.waitForTimeout(80);
+    over = ((await live.textContent()) ?? "").includes("Over Evaluated column");
+  }
+  expect(over).toBe(true);
+  await page.mouse.up();
+
+  await expect(column(page, "Evaluated").getByText("Halcyon Grid")).toBeVisible();
+  await expect(page.getByText(/Halcyon Grid → Evaluated/)).toBeVisible();
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(column(page, "Applied").getByText("Halcyon Grid")).toBeVisible();
+});
+
 test("keyboard drag (dnd-kit sensor) picks up and drops a card", async ({ page }) => {
   await openBoard(page);
 

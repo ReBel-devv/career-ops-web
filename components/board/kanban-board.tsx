@@ -7,11 +7,13 @@ import {
   KeyboardSensor,
   PointerSensor,
   closestCorners,
+  pointerWithin,
   useDraggable,
   useDroppable,
   useSensor,
   useSensors,
   type Announcements,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -53,6 +55,19 @@ export function KanbanBoard({
 }) {
   const reducedMotion = usePrefersReducedMotion();
   const [activeApp, setActiveApp] = useState<Application | null>(null);
+
+  // Columns are the droppables (no intra-column sorting). `closestCorners`
+  // alone is unreliable once a column is tall enough to overflow: its far
+  // (bottom) corners inflate the corner distance, so an adjacent SHORTER column
+  // wins the collision and dropping onto the long column fails. `pointerWithin`
+  // answers the real question ("which column is the pointer over?") accurately
+  // regardless of column height; we fall back to `closestCorners` only when
+  // there is no pointer (keyboard drag). This is the dnd-kit multi-container
+  // recommendation. See docs/DASHBOARD-FIXES.md #1.
+  const collisionDetection: CollisionDetection = (args) => {
+    const pointerCollisions = pointerWithin(args);
+    return pointerCollisions.length > 0 ? pointerCollisions : closestCorners(args);
+  };
 
   const sensors = useSensors(
     // distance guard so clicking a card link doesn't start a drag
@@ -102,7 +117,7 @@ export function KanbanBoard({
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCorners}
+      collisionDetection={collisionDetection}
       accessibility={{ announcements }}
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
@@ -164,7 +179,11 @@ function Column({
       <div
         ref={setNodeRef}
         className={cn(
-          "flex flex-1 flex-col gap-2 rounded-lg border border-dashed border-transparent p-1 transition-colors",
+          // `min-h-0 overflow-y-auto` keeps a long column scrolling INSIDE its
+          // own body instead of overflowing the board — so the droppable rect
+          // stays equal to the visible area (reliable collisions) and dnd-kit
+          // can auto-scroll within the column. See docs/DASHBOARD-FIXES.md #1.
+          "flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto rounded-lg border border-dashed border-transparent p-1 transition-colors",
           isOver && "border-ring bg-accent/40",
         )}
       >

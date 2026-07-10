@@ -14,6 +14,7 @@ import {
   type FollowUpLog,
   type FollowUpUrgency,
   type FollowUpWriteResult,
+  type InterviewPrepFile,
   type LogFollowUpInput,
   type OutreachDoc,
   type OutreachMutationResult,
@@ -94,6 +95,31 @@ let demoOutreach: OutreachDoc = buildDemoOutreach();
 
 const DEMO_ACTIONABLE_IDS = new Set(["applied", "responded", "interview"]);
 const APPLIED_FIRST = DEMO_CADENCE_CONFIG.applied_first;
+
+/** Fictional interview-prep notes for the demo (app #26, Emberfield, Interview). */
+const DEMO_INTERVIEW_PREP: Record<number, InterviewPrepFile[]> = {
+  26: [
+    {
+      fileName: "emberfield-ui-engineer-motion.md",
+      markdown: [
+        "# Emberfield — UI Engineer, Motion",
+        "",
+        "## Company angle",
+        "- Motion-first product team; portfolio landed the technical round.",
+        "- Emphasis on craft: micro-interactions, spring physics, reduced-motion a11y.",
+        "",
+        "## Likely questions",
+        "1. Walk through a complex animation you shipped and how you kept it 60fps.",
+        "2. How do you reconcile motion with accessibility (`prefers-reduced-motion`)?",
+        "3. Trade-offs: CSS transitions vs. a JS animation library.",
+        "",
+        "## STAR to lead with",
+        "- **Situation:** dashboard felt static; **Task:** add meaningful motion;",
+        "  **Action:** built a reusable transition layer; **Result:** +engagement, no perf regression.",
+      ].join("\n"),
+    },
+  ],
+};
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -245,6 +271,10 @@ export class DemoDataSource implements DataSource {
 
   async getDocuments(num: number): Promise<Document[]> {
     return DEMO_DOCUMENTS[num] ?? [];
+  }
+
+  async getInterviewPrep(num: number): Promise<InterviewPrepFile[]> {
+    return DEMO_INTERVIEW_PREP[num] ?? [];
   }
 
   /* --------------------------------------------------- Follow-ups (M4) --- */

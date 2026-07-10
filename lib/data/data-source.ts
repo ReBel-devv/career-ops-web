@@ -5,6 +5,7 @@ import type {
   DeleteOutreachContactInput,
   Document,
   FollowUpCadence,
+  InterviewPrepFile,
   FollowUpData,
   FollowUpWriteResult,
   LogFollowUpInput,
@@ -43,6 +44,8 @@ export interface DataSource {
   getReportFacets(): Promise<ReportFacet[]>;
   /** Generated documents (CV + cover letters) for an application. (M3) */
   getDocuments(num: number): Promise<Document[]>;
+  /** Company-specific interview-prep markdown files for an application, if any. */
+  getInterviewPrep(num: number): Promise<InterviewPrepFile[]>;
   /** Logged follow-ups + pins. (M4) */
   getFollowUps(): Promise<FollowUpData>;
   /** Follow-up cadence from `followup-cadence.mjs --json` — never recomputed. (M4) */

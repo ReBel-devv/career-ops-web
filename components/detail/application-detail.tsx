@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import {
   AlertTriangle,
+  BookOpen,
   CalendarClock,
   CheckCircle2,
   ExternalLink,
@@ -32,6 +33,7 @@ import {
   useDocuments,
   useFollowUpCadence,
   useFollowUps,
+  useInterviewPrep,
   useReport,
   useStates,
 } from "@/lib/client/queries";
@@ -133,7 +135,7 @@ export function ApplicationDetail({ num }: { num: number }) {
 
       <OutreachPanel num={num} />
 
-      {app.statusId === "interview" ? <InterviewPrepCard /> : null}
+      <InterviewPrepCard num={num} status={app.statusId} />
 
       {report ? <FullReport report={report} /> : null}
     </article>
@@ -589,19 +591,59 @@ function NotesEditor({ app, editable }: { app: Application; editable: boolean })
   );
 }
 
-/* --------------------------------------------------- Interview placeholder --- */
+/* ------------------------------------------------------- Interview prep --- */
 
-function InterviewPrepCard() {
+/**
+ * Surfaces the company-specific `interview-prep/{company}-{role}.md` notes the
+ * career-ops interview modes generate. Shown whenever a prep file matches this
+ * application (any status — an Applied row can already have prep), plus an
+ * honest empty state while the row is in the interview stage. Non-interview
+ * rows with no file render nothing (no empty section noise).
+ */
+function InterviewPrepCard({ num, status }: { num: number; status: string | null }) {
+  const query = useInterviewPrep(num);
+  const files = query.data ?? [];
+  const isInterview = status === "interview";
+
+  if (query.isLoading) {
+    if (!isInterview) return null;
+    return (
+      <Section title="Interview prep">
+        <Skeleton className="h-10 w-full" />
+      </Section>
+    );
+  }
+
+  if (files.length === 0) {
+    if (!isInterview) return null;
+    return (
+      <Section title="Interview prep">
+        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+          No interview-prep file yet. Generate one with the career-ops{" "}
+          <code className="font-mono text-foreground">interview</code> modes and it
+          will appear here.
+        </div>
+      </Section>
+    );
+  }
+
   return (
     <Section title="Interview prep">
-      <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
-        <p className="font-medium text-foreground">Interview prep</p>
-        <p className="mt-1">
-          Structured prep guides, STAR matching and time-blocked plans live in the
-          career-ops interview modes. Surfacing them here is out of scope for v1 —
-          this card is a placeholder.
-        </p>
-      </div>
+      <Accordion type="multiple" className="rounded-md border px-3">
+        {files.map((file, i) => (
+          <AccordionItem key={file.fileName} value={`prep-${i}`}>
+            <AccordionTrigger>
+              <span className="flex items-center gap-2">
+                <BookOpen className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="font-mono text-xs">{file.fileName}</span>
+              </span>
+            </AccordionTrigger>
+            <AccordionContent>
+              <ReportMarkdown markdown={file.markdown} />
+            </AccordionContent>
+          </AccordionItem>
+        ))}
+      </Accordion>
     </Section>
   );
 }
