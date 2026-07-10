@@ -25,6 +25,8 @@ import path from "node:path";
 
 const SCRIPT_FILES = [
   "tracker-parse.mjs",
+  // tracker-parse.mjs loads this JSON from its own dir — must sit beside it.
+  "tracker-aliases.json",
   "tracker-utils.mjs",
   "verify-pipeline.mjs",
   "followup-seed.mjs",

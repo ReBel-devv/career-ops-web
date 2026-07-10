@@ -23,7 +23,9 @@ const SYNTHETIC_DIRS = [
   path.join(FIXTURES, "synthetic-location"),
 ];
 const REAL_DIR = path.join(FIXTURES, "real");
-const PARSER_FILES = ["tracker-parse.mjs", "tracker-utils.mjs"];
+// tracker-parse.mjs loads tracker-aliases.json from its own directory, so the
+// JSON must land beside it in every fixture repo or the parser throws ENOENT.
+const PARSER_FILES = ["tracker-parse.mjs", "tracker-utils.mjs", "tracker-aliases.json"];
 
 export default async function setup(): Promise<void> {
   // Vitest does not load Next's .env.local — pull CAREER_OPS_PATH from it.

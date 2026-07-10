@@ -39,6 +39,7 @@ yarn-error.log*
 /tests/fixtures/real/
 /tests/fixtures/**/tracker-parse.mjs
 /tests/fixtures/**/tracker-utils.mjs
+/tests/fixtures/**/tracker-aliases.json
 
 # vercel
 .vercel
