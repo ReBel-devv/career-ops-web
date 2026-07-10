@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, ArrowUpDown, FileText, UsersRound } from "lucide-react";
 import { StatusSelect } from "@/components/applications/status-select";
 import { ScoreBadge } from "@/components/data/score-badge";
-import { STATUS_BORDER_CLASS, StatusIndicator } from "@/components/data/status-indicator";
+import { StatusIndicator } from "@/components/data/status-indicator";
 import {
   Table,
   TableBody,
@@ -45,8 +46,23 @@ export function ApplicationsTable({
   outreachByNum?: Map<number, OutreachCardHint>;
 }) {
   const editable = !readOnly && states.length > 0;
+  const router = useRouter();
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+
+  // Row click opens the same intercepted `/app/[num]` drawer as the board.
+  // Ignore clicks that originate on an interactive control (status editor,
+  // links, buttons) so those keep their own behavior.
+  function onRowClick(event: React.MouseEvent<HTMLTableRowElement>, num: number) {
+    if (
+      (event.target as HTMLElement).closest(
+        "a,button,input,select,[role='menu'],[data-no-row-nav]",
+      )
+    ) {
+      return;
+    }
+    router.push(`/app/${num}`);
+  }
 
   const sorted = useMemo(() => {
     const accessor = SORT_ACCESSORS[sortKey];
@@ -96,17 +112,20 @@ export function ApplicationsTable({
             sorted.map((app) => (
               <TableRow
                 key={`${app.num}-${app.company}-${app.role}`}
-                className={cn(
-                  "border-l-2",
-                  (app.dashboardGroup && STATUS_BORDER_CLASS[app.dashboardGroup]) ??
-                    "border-l-transparent",
-                )}
+                onClick={(e) => onRowClick(e, app.num)}
+                className="cursor-pointer transition-colors hover:bg-muted/40"
               >
                 <TableCell className="font-mono tabular-nums text-muted-foreground">
                   {String(app.num).padStart(3, "0")}
                 </TableCell>
                 <TableCell className="font-medium whitespace-nowrap">
-                  {app.company}
+                  <Link
+                    href={`/app/${app.num}`}
+                    className="underline-offset-2 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                    title={`${app.company} — ${app.role}`}
+                  >
+                    {app.company}
+                  </Link>
                   {outreachByNum?.has(app.num) ? (
                     <span
                       className="ml-1.5 inline-flex items-center gap-0.5 align-middle text-muted-foreground"

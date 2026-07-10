@@ -251,6 +251,38 @@
 }
 
 /* ---------------------------------------------------------------------------
+ * Subtle scrollbars — for internal scroll areas (board columns, drawer, menus).
+ * Thin, rounded, low-contrast thumb that intensifies on hover; transparent
+ * track. Cross-browser: `scrollbar-width` (Firefox) + `::-webkit-scrollbar`
+ * (Chromium/Safari). The transparent border + padding-box clip float the thumb.
+ * ------------------------------------------------------------------------- */
+.scrollbar-subtle {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--muted-foreground) 28%, transparent)
+    transparent;
+}
+.scrollbar-subtle::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-subtle::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-subtle::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--muted-foreground) 22%, transparent);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.15s ease;
+}
+.scrollbar-subtle:hover::-webkit-scrollbar-thumb {
+  background-color: color-mix(in oklab, var(--muted-foreground) 42%, transparent);
+}
+.scrollbar-subtle::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in oklab, var(--muted-foreground) 58%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
  * Report prose — rendered French report markdown (react-markdown + GFM).
  * Hand-rolled (no typography plugin); tuned for dense data reading in both
  * themes. GFM tables scroll inside their own container.

@@ -20,6 +20,18 @@ test("clicking a card opens the detail drawer over the board", async ({ page }) 
   await expect(drawer.getByText("Score breakdown")).toBeVisible();
 });
 
+test("clicking an Applications row opens the same detail drawer", async ({ page }) => {
+  await page.goto("/applications");
+  // Click the row (not the company link) — a bare cell still navigates.
+  const row = page.getByRole("row").filter({ hasText: "Nimbus Labs" }).first();
+  await expect(row).toBeVisible();
+  await row.getByRole("cell").filter({ hasText: "Design Engineer" }).click();
+  const drawer = page.getByRole("dialog");
+  await expect(drawer).toBeVisible();
+  await expect(drawer.getByRole("heading", { name: "Nimbus Labs" })).toBeVisible();
+  await expect(page).toHaveURL(/\/app\/1$/);
+});
+
 test("deep link renders the full detail page with all report zones", async ({ page }) => {
   await page.goto("/app/12");
   await expect(page.getByRole("heading", { name: "Halcyon Grid" })).toBeVisible();

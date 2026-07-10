@@ -295,10 +295,10 @@ function ChipList({
   items: string[];
   tone: "high" | "mid" | "low";
 }) {
-  const border = {
-    high: "border-l-score-high",
-    mid: "border-l-score-mid",
-    low: "border-l-score-low",
+  const dotTone = {
+    high: "bg-score-high",
+    mid: "bg-score-mid",
+    low: "bg-score-low",
   }[tone];
   return (
     <div>
@@ -308,8 +308,12 @@ function ChipList({
       </p>
       <ul className="flex flex-col gap-1">
         {items.map((item, i) => (
-          <li key={i} className={cn("border-l-2 pl-2 text-sm leading-snug", border)}>
-            {item}
+          <li key={i} className="flex gap-2 text-sm leading-snug">
+            <span
+              aria-hidden
+              className={cn("mt-[0.4rem] size-1.5 shrink-0 rounded-full", dotTone)}
+            />
+            <span>{item}</span>
           </li>
         ))}
       </ul>
@@ -437,13 +441,21 @@ function Timeline({
       {cadenceEntry && cadenceEntry.nextFollowupDate ? (
         <div
           className={cn(
-            "flex flex-wrap items-center gap-2 rounded-md border border-l-2 px-3 py-2 text-sm",
-            cadenceEntry.urgency === "overdue" || cadenceEntry.urgency === "urgent"
-              ? "border-l-score-low bg-score-low/5"
-              : "border-l-primary",
+            "flex flex-wrap items-center gap-2 rounded-md border px-3 py-2 text-sm",
+            (cadenceEntry.urgency === "overdue" ||
+              cadenceEntry.urgency === "urgent") &&
+              "bg-score-low/5",
           )}
         >
-          <CalendarClock className="size-3.5 shrink-0 text-primary" aria-hidden />
+          <CalendarClock
+            className={cn(
+              "size-3.5 shrink-0",
+              cadenceEntry.urgency === "overdue" || cadenceEntry.urgency === "urgent"
+                ? "text-score-low"
+                : "text-primary",
+            )}
+            aria-hidden
+          />
           <span className="font-medium">Next action:</span>
           <span className="text-muted-foreground">
             follow up{" "}

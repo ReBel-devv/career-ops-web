@@ -16,8 +16,8 @@ import {
   type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
+  type DropAnimation,
 } from "@dnd-kit/core";
-import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import { ApplicationCard } from "@/components/board/application-card";
 import { MoveStatusMenu } from "@/components/board/move-status-menu";
@@ -27,6 +27,16 @@ import type { OutreachCardHint } from "@/lib/outreach-view";
 import type { Application, CanonicalState } from "@/lib/domain";
 import type { BoardColumn } from "@/lib/grouping";
 import { cn } from "@/lib/utils";
+
+/**
+ * Drop animation: a smooth, slightly emphasized decelerate curve so the card
+ * settles rather than snaps. The overlay tilt/scale is reset over the same
+ * window for a natural "set down" feel.
+ */
+const dropAnimation: DropAnimation = {
+  duration: 220,
+  easing: "cubic-bezier(0.2, 0, 0, 1)",
+};
 
 /**
  * Desktop Kanban board (F1): horizontal columns, drag between them, keyboard
@@ -137,9 +147,16 @@ export function KanbanBoard({
         ))}
       </div>
 
-      <DragOverlay dropAnimation={reducedMotion ? null : undefined}>
+      <DragOverlay dropAnimation={reducedMotion ? null : dropAnimation}>
         {activeApp ? (
-          <ApplicationCard app={activeApp} dragging className="w-64 cursor-grabbing shadow-lg" />
+          <ApplicationCard
+            app={activeApp}
+            className={cn(
+              "w-64 cursor-grabbing shadow-2xl ring-1 ring-foreground/10",
+              // Picked-up feel: a slight tilt + lift. Skipped under reduced motion.
+              !reducedMotion && "rotate-[2deg] scale-[1.03]",
+            )}
+          />
         ) : null}
       </DragOverlay>
     </DndContext>
@@ -183,8 +200,8 @@ function Column({
           // own body instead of overflowing the board — so the droppable rect
           // stays equal to the visible area (reliable collisions) and dnd-kit
           // can auto-scroll within the column. See docs/DASHBOARD-FIXES.md #1.
-          "flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto rounded-lg border border-dashed border-transparent p-1 transition-colors",
-          isOver && "border-ring bg-accent/40",
+          "scrollbar-subtle flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto rounded-lg border border-dashed border-transparent p-1 transition-colors duration-200",
+          isOver && "border-primary/40 bg-accent/40",
         )}
       >
         {column.applications.map((app) => (
@@ -228,7 +245,6 @@ function DraggableCard({
     listeners,
     setNodeRef,
     setActivatorNodeRef,
-    transform,
     isDragging,
   } = useDraggable({ id: app.num, disabled });
 
@@ -237,6 +253,9 @@ function DraggableCard({
   // role — its link and buttons stay properly reachable. The keyboard/ARIA
   // drag surface is a dedicated handle button (dnd-kit activator) carrying
   // `attributes` (role, tabindex, aria-roledescription) + listeners.
+  //
+  // With a DragOverlay, the source stays put as a dimmed ghost (no transform)
+  // and the overlay carries the motion — cleaner than translating both.
   return (
     <ApplicationCard
       ref={setNodeRef}
@@ -244,8 +263,10 @@ function DraggableCard({
       overdue={overdue}
       outreach={outreach}
       dragging={isDragging}
-      className={cn(!disabled && "cursor-grab active:cursor-grabbing")}
-      style={transform ? { transform: CSS.Translate.toString(transform) } : undefined}
+      className={cn(
+        !disabled && "cursor-grab active:cursor-grabbing",
+        isDragging && "opacity-40 ring-1 ring-border",
+      )}
       action={
         <>
           {!disabled ? (

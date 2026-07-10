@@ -27,8 +27,8 @@ export function FollowUpItem({ entry }: { entry: CadenceEntry }) {
   return (
     <div
       className={cn(
-        "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-l-2 bg-card px-3 py-2 text-data",
-        overdue ? "border-l-score-low" : "border-l-transparent",
+        "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-card px-3 py-2 text-data transition-colors",
+        overdue && "bg-score-low/5",
       )}
     >
       <span aria-hidden className={cn("size-2 shrink-0 rounded-full", dot)} />

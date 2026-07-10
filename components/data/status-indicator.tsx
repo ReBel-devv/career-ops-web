@@ -15,18 +15,7 @@ export const STATUS_DOT_CLASS: Record<string, string> = {
   skip: "bg-status-skip",
 };
 
-export const STATUS_BORDER_CLASS: Record<string, string> = {
-  evaluated: "border-l-status-evaluated",
-  applied: "border-l-status-applied",
-  responded: "border-l-status-responded",
-  interview: "border-l-status-interview",
-  offer: "border-l-status-offer",
-  rejected: "border-l-status-rejected",
-  discarded: "border-l-status-discarded",
-  skip: "border-l-status-skip",
-};
-
-/** Muted dot + label — the canonical status rendering (dot + left-border style). */
+/** Muted dot + label — the canonical status rendering. */
 export function StatusIndicator({
   group,
   label,

@@ -46,7 +46,7 @@ function SheetContent({
       <SheetPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          "fixed z-50 flex flex-col gap-4 overflow-y-auto bg-popover p-4 text-popover-foreground shadow-lg transition data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:duration-300 motion-reduce:animate-none pb-[max(1rem,env(safe-area-inset-bottom))]",
+          "scrollbar-subtle fixed z-50 flex flex-col gap-4 overflow-y-auto bg-popover p-4 text-popover-foreground shadow-lg transition data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-200 data-[state=open]:duration-300 motion-reduce:animate-none pb-[max(1rem,env(safe-area-inset-bottom))]",
           SIDE[side],
           className,
         )}

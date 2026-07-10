@@ -5,7 +5,6 @@ import * as React from "react";
 import { forwardRef, type ReactNode } from "react";
 import { AlertTriangle, FileText, UsersRound } from "lucide-react";
 import { ScoreBadge } from "@/components/data/score-badge";
-import { STATUS_BORDER_CLASS } from "@/components/data/status-indicator";
 import { STAGE_LABELS, type OutreachCardHint } from "@/lib/outreach-view";
 import type { Application } from "@/lib/domain";
 import { cn } from "@/lib/utils";
@@ -40,9 +39,12 @@ export const ApplicationCard = forwardRef<HTMLDivElement, ApplicationCardProps>(
       <div
         ref={ref}
         className={cn(
-          "group/card rounded-md border border-l-2 bg-card p-2.5 text-data shadow-xs",
-          (app.dashboardGroup && STATUS_BORDER_CLASS[app.dashboardGroup]) ??
-            "border-l-transparent",
+          // Minimalist premium card: hairline border + subtle shadow, gentle
+          // lift on hover. Status color is carried by the column (and the score
+          // badge) — no left accent bar.
+          "group/card rounded-md border bg-card p-2.5 text-data shadow-xs",
+          "transition-[box-shadow,border-color,transform] duration-150",
+          "hover:border-foreground/20 hover:shadow-sm",
           dragging && "opacity-60",
           className,
         )}
