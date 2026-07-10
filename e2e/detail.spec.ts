@@ -59,6 +59,18 @@ test("documents zone links the generated placeholder PDF", async ({ page }) => {
   expect((await response.body()).subarray(0, 5).toString()).toBe("%PDF-");
 });
 
+test("interview-prep files render for a matching application", async ({ page }) => {
+  await page.goto("/app/26"); // Emberfield, Interview — has a demo prep file
+  await expect(page.getByRole("heading", { name: "Emberfield", exact: true })).toBeVisible();
+  await expect(page.getByText("Interview prep")).toBeVisible();
+  const prep = page.getByRole("button", {
+    name: /emberfield-ui-engineer-motion\.md/,
+  });
+  await expect(prep).toBeVisible();
+  await prep.click(); // expand → the markdown renders
+  await expect(page.getByText("Likely questions")).toBeVisible();
+});
+
 test("outreach stepper advances a contact stage with undo", async ({ page }) => {
   await page.goto("/app/1");
   await expect(page.getByText("Maya Lindqvist")).toBeVisible();

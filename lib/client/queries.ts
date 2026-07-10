@@ -12,6 +12,7 @@ import {
   applicationSchema,
   documentSchema,
   followUpCadenceSchema,
+  interviewPrepFileSchema,
   followUpDataSchema,
   outreachContactSchema,
   patternsResultSchema,
@@ -24,6 +25,7 @@ import {
   type Document,
   type FollowUpCadence,
   type FollowUpData,
+  type InterviewPrepFile,
   type OutreachContact,
   type OutreachContactKind,
   type OutreachRecord,
@@ -92,6 +94,7 @@ export function useStates() {
 
 const reportResponse = z.object({ report: reportSchema });
 const documentsResponse = z.object({ documents: z.array(documentSchema) });
+const interviewPrepResponse = z.object({ files: z.array(interviewPrepFileSchema) });
 const followUpsResponse = z.object({ data: followUpDataSchema });
 const reportFacetsResponse = z.object({ facets: z.array(reportFacetSchema) });
 
@@ -120,6 +123,17 @@ export function useDocuments(num: number) {
     queryFn: async (): Promise<Document[]> => {
       const json = await fetchJson(`/api/applications/${num}/documents`);
       return documentsResponse.parse(json).documents;
+    },
+  });
+}
+
+/** Company-specific interview-prep markdown files for one application. */
+export function useInterviewPrep(num: number) {
+  return useQuery({
+    queryKey: ["interview-prep", num] as const,
+    queryFn: async (): Promise<InterviewPrepFile[]> => {
+      const json = await fetchJson(`/api/applications/${num}/interview-prep`);
+      return interviewPrepResponse.parse(json).files;
     },
   });
 }

@@ -2,6 +2,7 @@ export * from "./application";
 export * from "./cadence";
 export * from "./document";
 export * from "./followup";
+export * from "./interview-prep";
 export * from "./outreach";
 export * from "./parse";
 export * from "./patterns";

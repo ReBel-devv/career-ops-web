@@ -102,6 +102,104 @@ describe("matchDocuments", () => {
   });
 });
 
+describe("matchDocuments — cover matching by company slug (regression: covers hidden)", () => {
+  // Reproduces the real bug with fictional companies: the report slug
+  // (company+role) was longer/different than the cover file's company prefix,
+  // so `startsWith(reportSlug)` hid the cover.
+  const OUT = [
+    "quayside-design-engineer-cover.pdf",
+    "larkspur-frontend-engineer-growth-cover.pdf",
+    "windrose-ui-engineer-charts-cover.pdf",
+    "meridian-labs-frontend-engineer-cover.pdf",
+  ];
+
+  it("matches a cover whose report slug is longer than the company prefix", () => {
+    const docs = matchDocuments({
+      num: 53,
+      // report slug `larkspur-growth` ≠ cover role `frontend-engineer-growth`
+      reportFilename: "053-larkspur-growth-2026-07-10.md",
+      indexEntries: [],
+      outputFiles: OUT,
+      app: { company: "Larkspur", role: "Frontend Engineer, Growth" },
+      siblings: [{ num: 53, company: "Larkspur", role: "Frontend Engineer, Growth" }],
+    });
+    expect(docs.map((d) => d.fileName)).toContain(
+      "larkspur-frontend-engineer-growth-cover.pdf",
+    );
+  });
+
+  it("disambiguates a shared-company cover to the best role match (#21 not #22)", () => {
+    const siblings = [
+      { num: 21, company: "Windrose", role: "UI Engineer, Charts" },
+      { num: 22, company: "Windrose", role: "Backend Engineer, Core" },
+    ];
+    const forCharts = matchDocuments({
+      num: 21,
+      reportFilename: "021-windrose-ui-charts-2026-07-05.md",
+      indexEntries: [],
+      outputFiles: OUT,
+      app: { company: "Windrose", role: "UI Engineer, Charts" },
+      siblings,
+    });
+    const forCore = matchDocuments({
+      num: 22,
+      reportFilename: "022-windrose-core-2026-07-05.md",
+      indexEntries: [],
+      outputFiles: OUT,
+      app: { company: "Windrose", role: "Backend Engineer, Core" },
+      siblings,
+    });
+    expect(forCharts.map((d) => d.fileName)).toContain(
+      "windrose-ui-engineer-charts-cover.pdf",
+    );
+    expect(forCore.map((d) => d.fileName)).not.toContain(
+      "windrose-ui-engineer-charts-cover.pdf",
+    );
+  });
+
+  it("shows an ambiguous same-role cover on all tied siblings", () => {
+    const siblings = [
+      { num: 28, company: "Quayside", role: "Design Engineer, Product" },
+      { num: 29, company: "Quayside", role: "Design Engineer, Platform" },
+    ];
+    const base = { indexEntries: [], outputFiles: OUT, siblings };
+    // Cover role `design-engineer` overlaps both roles equally → both show it
+    // (never hide a real file when we genuinely can't disambiguate).
+    const a = matchDocuments({
+      ...base,
+      num: 28,
+      reportFilename: "028-quayside-design-engineer-product-2026-07-06.md",
+      app: { company: "Quayside", role: "Design Engineer, Product" },
+    });
+    const b = matchDocuments({
+      ...base,
+      num: 29,
+      reportFilename: "029-quayside-design-engineer-platform-2026-07-06.md",
+      app: { company: "Quayside", role: "Design Engineer, Platform" },
+    });
+    expect(a.map((d) => d.fileName)).toContain("quayside-design-engineer-cover.pdf");
+    expect(b.map((d) => d.fileName)).toContain("quayside-design-engineer-cover.pdf");
+  });
+
+  it("does not leak a cover to an unrelated same-company role", () => {
+    const siblings = [
+      { num: 1, company: "Meridian Labs", role: "Frontend Engineer" },
+      { num: 2, company: "Meridian Labs", role: "Data Platform Engineer" },
+    ];
+    const forData = matchDocuments({
+      num: 2,
+      reportFilename: "002-meridian-labs-data-2026-07-04.md",
+      indexEntries: [],
+      outputFiles: OUT,
+      app: { company: "Meridian Labs", role: "Data Platform Engineer" },
+      siblings,
+    });
+    expect(forData.map((d) => d.fileName)).not.toContain(
+      "meridian-labs-frontend-engineer-cover.pdf",
+    );
+  });
+});
+
 const realIndexPath = path.join(REAL_DIR, "data", "pdf-index.tsv");
 const realOutputList = path.join(REAL_DIR, "output-files.json");
 

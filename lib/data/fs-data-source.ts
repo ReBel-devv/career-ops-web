@@ -15,6 +15,7 @@ import {
   type FollowUpCadence,
   type FollowUpData,
   type FollowUpWriteResult,
+  type InterviewPrepFile,
   type LogFollowUpInput,
   type OutreachMutationResult,
   type OutreachRecord,
@@ -33,6 +34,7 @@ import { parseReport, reportFacet } from "@/lib/parsers/report";
 import { parseFollowUps } from "@/lib/parsers/follow-ups";
 import { parsePipeline } from "@/lib/parsers/pipeline";
 import { matchDocuments, parsePdfIndex } from "@/lib/parsers/documents";
+import { matchInterviewPrep } from "@/lib/parsers/interview-prep";
 import {
   runAnalyzePatterns,
   runFollowupCadence,
@@ -197,7 +199,7 @@ export class FsDataSource implements DataSource {
   }
 
   async getDocuments(num: number): Promise<Document[]> {
-    const [indexContent, outputFiles, reportFilename] = await Promise.all([
+    const [indexContent, outputFiles, reportFilename, apps] = await Promise.all([
       fs.readFile(this.resolve("data", "pdf-index.tsv"), "utf8").catch((e: unknown) => {
         if (isNotFound(e)) return "";
         throw e;
@@ -207,13 +209,59 @@ export class FsDataSource implements DataSource {
         throw e;
       }),
       this.findReportFile(num),
+      this.getApplications().catch(() => [] as Application[]),
     ]);
+    const app = apps.find((a) => a.num === num);
     return matchDocuments({
       num,
       reportFilename,
       indexEntries: parsePdfIndex(indexContent),
       outputFiles: outputFiles.filter((f) => f.toLowerCase().endsWith(".pdf")),
+      ...(app
+        ? {
+            app: { company: app.company, role: app.role },
+            // Same-company rows disambiguate a cover among several roles.
+            siblings: apps
+              .filter((a) => a.company === app.company)
+              .map((a) => ({ num: a.num, company: a.company, role: a.role })),
+          }
+        : {}),
     });
+  }
+
+  async getInterviewPrep(num: number): Promise<InterviewPrepFile[]> {
+    const [prepFiles, apps] = await Promise.all([
+      fs.readdir(this.resolve("interview-prep")).catch((e: unknown) => {
+        if (isNotFound(e)) return [] as string[];
+        throw e;
+      }),
+      this.getApplications().catch(() => [] as Application[]),
+    ]);
+    const app = apps.find((a) => a.num === num);
+    if (!app) return [];
+    const matched = matchInterviewPrep({
+      num,
+      app: { company: app.company, role: app.role },
+      siblings: apps
+        .filter((a) => a.company === app.company)
+        .map((a) => ({ num: a.num, company: a.company, role: a.role })),
+      prepFiles,
+    });
+    // Read each matched file's markdown. Guard against traversal: `matched`
+    // basenames come straight from readdir, but validate anyway before reading.
+    const files: InterviewPrepFile[] = [];
+    for (const fileName of matched) {
+      if (!/^[A-Za-z0-9._-]+\.md$/.test(fileName) || fileName.includes("..")) continue;
+      const full = this.resolve("interview-prep", fileName);
+      if (full !== path.join(this.resolve("interview-prep"), fileName)) continue;
+      try {
+        const markdown = await fs.readFile(full, "utf8");
+        files.push({ fileName, markdown });
+      } catch (error: unknown) {
+        if (!isNotFound(error)) throw error;
+      }
+    }
+    return files;
   }
 
   async getFollowUps(): Promise<FollowUpData> {
