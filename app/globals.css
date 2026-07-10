@@ -119,8 +119,11 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
+  /* AA pairing (dark): a light-enough accent that `text-primary` links pass
+   * 4.5:1 on the dark background, with a DARK foreground so filled
+   * badges/chips pass too (light-on-light-blue was ~3.4:1 and failed axe). */
   --primary: oklch(0.62 0.15 255);
-  --primary-foreground: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.145 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.235 0 0);
@@ -183,12 +186,15 @@
     --card-foreground: oklch(0.145 0 0);
     --popover: oklch(1 0 0);
     --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.55 0.17 255);
+    /* Slightly darker than the old 0.55 so white text clears AA with margin. */
+    --primary: oklch(0.52 0.17 255);
     --primary-foreground: oklch(0.985 0 0);
     --secondary: oklch(0.97 0 0);
     --secondary-foreground: oklch(0.205 0 0);
     --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
+    /* 0.5 (not the shadcn default 0.556): secondary text keeps AA on white
+     * AND on bg-muted surfaces (inactive tabs sat at ~4.2:1 before). */
+    --muted-foreground: oklch(0.5 0 0);
     --accent: oklch(0.97 0 0);
     --accent-foreground: oklch(0.205 0 0);
     --destructive: oklch(0.577 0.245 27.325);
@@ -218,9 +224,11 @@
     --status-discarded: oklch(0.5 0.05 60);
     --status-skip: oklch(0.6 0.02 260);
 
-    --score-high: oklch(0.55 0.13 150);
-    --score-mid: oklch(0.6 0.12 80);
-    --score-low: oklch(0.53 0.13 25);
+    /* Darker than the dot/border-oriented status hues: these render as TEXT
+     * in score badges, so they must clear 4.5:1 on the /10 tint over white. */
+    --score-high: oklch(0.47 0.12 150);
+    --score-mid: oklch(0.5 0.11 80);
+    --score-low: oklch(0.5 0.14 25);
   }
 }
 

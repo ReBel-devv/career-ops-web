@@ -5,6 +5,13 @@ import { FilterBar } from "@/components/filters/filter-bar";
 
 export const metadata: Metadata = { title: "Board" };
 
+// The board reads URL filter params at request time. Without this, Next
+// prerenders a static shell and — in production only — `router.replace`
+// no-ops when the page was LOADED with search params already present
+// (observed on Next 16.2: the router's canonical state and the real URL
+// disagree, so filter commits silently drop). Living data, no static value.
+export const dynamic = "force-dynamic";
+
 export default function BoardPage() {
   return (
     <div className="flex flex-col gap-4 px-4 py-6 md:px-6">

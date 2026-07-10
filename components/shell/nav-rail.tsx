@@ -35,9 +35,11 @@ export function NavRail() {
           className="flex min-w-0 items-center gap-2 font-medium"
           aria-label="Career Ops — Board"
         >
+          {/* Monochrome mark: foreground-on-background inverts cleanly in both
+              themes and passes AA contrast (the accented version didn't). */}
           <span
             aria-hidden
-            className="flex size-8 shrink-0 items-center justify-center rounded-md bg-primary font-mono text-data font-semibold text-primary-foreground"
+            className="flex size-8 shrink-0 items-center justify-center rounded-md bg-foreground font-mono text-data font-semibold text-background"
           >
             co
           </span>
@@ -95,6 +97,9 @@ function RailLink({
     <Link
       href={item.href}
       aria-current={active ? "page" : undefined}
+      // Collapsed rail shows only the icon — the tooltip is hover-only, so the
+      // link still needs an always-present accessible name.
+      aria-label={item.label}
       className={cn(
         "flex h-10 items-center gap-3 rounded-md px-2.5",
         "focus-visible:outline-2 focus-visible:outline-ring",

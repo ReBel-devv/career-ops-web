@@ -16,6 +16,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { GripVertical } from "lucide-react";
 import { ApplicationCard } from "@/components/board/application-card";
 import { MoveStatusMenu } from "@/components/board/move-status-menu";
 import { STATUS_DOT_CLASS } from "@/components/data/status-indicator";
@@ -203,11 +204,20 @@ function DraggableCard({
   overdue: boolean;
   outreach?: OutreachCardHint;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: app.num,
-    disabled,
-  });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    isDragging,
+  } = useDraggable({ id: app.num, disabled });
 
+  // A11y split (axe `nested-interactive`): the card div keeps the POINTER
+  // listeners (drag from anywhere with the mouse) but carries no interactive
+  // role — its link and buttons stay properly reachable. The keyboard/ARIA
+  // drag surface is a dedicated handle button (dnd-kit activator) carrying
+  // `attributes` (role, tabindex, aria-roledescription) + listeners.
   return (
     <ApplicationCard
       ref={setNodeRef}
@@ -218,14 +228,27 @@ function DraggableCard({
       className={cn(!disabled && "cursor-grab active:cursor-grabbing")}
       style={transform ? { transform: CSS.Translate.toString(transform) } : undefined}
       action={
-        <MoveStatusMenu
-          app={app}
-          states={states}
-          onMove={(statusId) => onMove(app, statusId)}
-          disabled={disabled}
-        />
+        <>
+          {!disabled ? (
+            <button
+              type="button"
+              ref={setActivatorNodeRef}
+              aria-label={`Drag #${app.num} ${app.company}`}
+              className="inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-ring active:cursor-grabbing"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical className="size-3.5" aria-hidden />
+            </button>
+          ) : null}
+          <MoveStatusMenu
+            app={app}
+            states={states}
+            onMove={(statusId) => onMove(app, statusId)}
+            disabled={disabled}
+          />
+        </>
       }
-      {...attributes}
       {...listeners}
     />
   );

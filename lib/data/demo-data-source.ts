@@ -1,6 +1,5 @@
 import {
   applicationSchema,
-  OUTREACH_SCHEMA_VERSION,
   patternsSchema,
   scanRecordSchema,
   statesFileSchema,
@@ -40,13 +39,29 @@ import {
   TrackerWriteError,
 } from "@/lib/writers";
 import { parsePipeline } from "@/lib/parsers/pipeline";
+import { parseReport, reportFacet } from "@/lib/parsers/report";
+import { DEMO_APPS } from "@/fixtures/apps";
+import { DEMO_REPORTS } from "@/fixtures/reports";
+import { DEMO_CADENCE_CONFIG, DEMO_FOLLOW_UP_SEEDS } from "@/fixtures/follow-ups";
+import { buildDemoOutreach } from "@/fixtures/outreach";
+import { DEMO_PIPELINE_MD, DEMO_SCAN_HISTORY } from "@/fixtures/discovery";
+import { DEMO_DOCUMENTS } from "@/fixtures/pdfs";
+import { buildDemoPatterns } from "@/fixtures/patterns";
 import type { DataSource } from "./data-source";
 
 /**
- * Fixture-backed DataSource used when DEMO_MODE=true. Never touches the
- * filesystem. M0 ships a minimal fictional dataset — the full ~30-application
- * anonymized demo (with reports, follow-ups, in-memory writes) lands in M7.
- * All companies and people are invented.
+ * Fixture-backed DataSource used when DEMO_MODE=true (plan §7). Never touches
+ * the filesystem. The full fictional dataset lives in `fixtures/` — ~30
+ * invented applications across all 8 states, 8 full English reports (parsed by
+ * the REAL report parser), dynamic-offset follow-ups, seeded outreach, a
+ * pipeline inbox (parsed by the REAL pipeline parser), scanner history, and
+ * generated placeholder PDFs. Analytics are DERIVED from the fixtures with the
+ * same outcome/channel math as the real code paths (fixtures/patterns.ts).
+ *
+ * Writes (Decision 6): fully interactive, in-memory only — module-level state
+ * that resets on server restart (and on serverless instance recycle in the
+ * public demo). Demo mutations reuse the SAME validation + pure mutation
+ * functions as FS mode, so the two modes never drift.
  */
 
 /** Mirrors the 8 canonical states of templates/states.yml (demo has no repo). */
@@ -63,104 +78,22 @@ const DEMO_STATES_FILE = {
   ],
 };
 
-interface DemoApp {
-  num: number;
-  date: string;
-  company: string;
-  role: string;
-  score: number | null;
-  statusId: string;
-  hasPdf: boolean;
-  notes: string;
-}
+/* ------------------------------------------------- in-memory demo state --- */
 
-const DEMO_APPS: DemoApp[] = [
-  { num: 1, date: "2026-06-02", company: "Nimbus Labs", role: "Design Engineer", score: 4.4, statusId: "interview", hasPdf: true, notes: "Exact archetype match — React/Tailwind/motion. Second-round interview scheduled." },
-  { num: 2, date: "2026-06-03", company: "Vectorline", role: "Frontend Engineer, Platform", score: 3.8, statusId: "applied", hasPdf: true, notes: "Strong stack overlap; platform emphasis is a slight mismatch." },
-  { num: 3, date: "2026-06-05", company: "Acme Intelligence", role: "Senior Fullstack Engineer", score: 2.4, statusId: "skip", hasPdf: false, notes: "SKIP — 8+ years required plus heavy backend focus." },
-  { num: 4, date: "2026-06-09", company: "Helioscope", role: "Product Engineer", score: 4.1, statusId: "offer", hasPdf: true, notes: "Offer received — remote-first, AI product surface, strong craft culture." },
-  { num: 5, date: "2026-06-12", company: "Quartzworks", role: "UI Engineer", score: 3.2, statusId: "evaluated", hasPdf: false, notes: "Borderline — good stack but design-system-only scope." },
-  { num: 6, date: "2026-06-16", company: "Lumen Systems", role: "Frontend Engineer, AI Tools", score: 3.9, statusId: "rejected", hasPdf: true, notes: "Rejected after take-home; feedback: seniority bar." },
-  { num: 7, date: "2026-06-20", company: "Driftworks", role: "Design Engineer, Web", score: 3.5, statusId: "responded", hasPdf: true, notes: "Recruiter replied — screening call to book." },
-  { num: 8, date: "2026-06-24", company: "Parallax Digital", role: "Creative Developer", score: 2.9, statusId: "discarded", hasPdf: false, notes: "Posting closed before applying." },
-];
-
-/**
- * In-memory demo write overrides (Decision 6): the public demo is fully
- * interactive but stateless — overrides live in this module's memory only,
- * are keyed by app num, and vanish on server restart / new serverless
- * instance. Never touches any file.
- */
+/** Status/notes overrides keyed by app num (Decision 6 — never touches a file). */
 const demoOverrides = new Map<number, { statusId?: string; notes?: string }>();
 
-/**
- * In-memory follow-up state for the demo (stateless, resets on reload).
- * Reschedule appends a pin override; log-sent appends a table row — mirroring
- * the FS mode's append-only semantics without ever touching a file.
- */
+/** Session pins (reschedules) + session follow-up logs, layered over the
+ * dynamic fixture seeds. */
 const demoPins = new Map<number, { date: string; setDate: string }>();
-const demoLogs: FollowUpLog[] = [];
+const demoSessionLogs: FollowUpLog[] = [];
 
-/**
- * In-memory outreach document (Decision 6). Mutated through the SAME pure
- * `applyAddContact`/`applyUpdateContact`/`applyDeleteContact` functions the FS
- * writer uses, so demo and real modes exercise one mutation code path. Seeded
- * with two invented contacts so the panel + card indicator render out of the
- * box; resets on server restart.
- */
-let demoOutreach: OutreachDoc = {
-  version: OUTREACH_SCHEMA_VERSION,
-  applications: {
-    "1": [
-      {
-        id: "c_demo0001",
-        kind: "recruiter",
-        name: "Maya Lindqvist",
-        linkedin: "https://www.linkedin.com/in/maya-lindqvist-demo",
-        companyRole: "Technical Recruiter",
-        stage: "messaged",
-        stageDates: {
-          identified: "2026-06-03",
-          requested: "2026-06-04",
-          accepted: "2026-06-06",
-          messaged: "2026-06-07",
-        },
-        notes: "Warm reply on the intro thread.",
-      },
-      {
-        id: "c_demo0002",
-        kind: "hiring-manager",
-        name: "Jonas Reber",
-        companyRole: "Engineering Manager, Web Platform",
-        stage: "identified",
-        stageDates: { identified: "2026-06-05" },
-      },
-    ],
-    "4": [
-      {
-        id: "c_demo0003",
-        kind: "founder",
-        name: "Priya Natarajan",
-        linkedin: "https://www.linkedin.com/in/priya-natarajan-demo",
-        stage: "replied",
-        stageDates: {
-          identified: "2026-06-10",
-          requested: "2026-06-10",
-          accepted: "2026-06-11",
-          messaged: "2026-06-12",
-          replied: "2026-06-14",
-        },
-        notes: "Asked for the portfolio link — sent it.",
-      },
-    ],
-  },
-};
+/** In-memory outreach document, seeded from fixtures. Mutated through the SAME
+ * pure apply* functions the FS writer uses. */
+let demoOutreach: OutreachDoc = buildDemoOutreach();
 
-/** Days since application, keyed by demo app num — drives dynamic cadence dates
- * so the demo calendar never goes stale (one overdue, one upcoming). */
-const DEMO_APPLIED_OFFSET: Record<number, number> = { 1: 3, 2: 9, 7: 1 };
 const DEMO_ACTIONABLE_IDS = new Set(["applied", "responded", "interview"]);
-const DEMO_APPLIED_FIRST = 7;
+const APPLIED_FIRST = DEMO_CADENCE_CONFIG.applied_first;
 
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10);
@@ -176,6 +109,30 @@ function daysBetweenISO(from: string, to: string): number {
   const a = new Date(`${from}T00:00:00.000Z`).getTime();
   const b = new Date(`${to}T00:00:00.000Z`).getTime();
   return Math.floor((b - a) / 86_400_000);
+}
+
+/** Seeded follow-up log rows with DYNAMIC dates (offsets from today). */
+function seededLogs(): FollowUpLog[] {
+  const today = todayISO();
+  const appsByNum = new Map(DEMO_APPS.map((a) => [a.num, a]));
+  const logs: FollowUpLog[] = [];
+  for (const seed of DEMO_FOLLOW_UP_SEEDS) {
+    const app = appsByNum.get(seed.appNum);
+    if (!app || !seed.loggedDaysAgo?.length) continue;
+    for (const daysAgo of seed.loggedDaysAgo) {
+      logs.push({
+        num: logs.length + 1,
+        appNum: seed.appNum,
+        date: addDaysISO(today, -daysAgo),
+        company: app.company,
+        role: app.role,
+        channel: "email",
+        contact: "",
+        notes: "Polite nudge with the portfolio link.",
+      });
+    }
+  }
+  return logs;
 }
 
 export class DemoDataSource implements DataSource {
@@ -203,14 +160,14 @@ export class DemoDataSource implements DataSource {
         statusLabel: state?.label ?? null,
         dashboardGroup: state?.dashboardGroup ?? null,
         hasPdf: app.hasPdf,
-        reportPath: null,
+        reportPath: app.reportPath,
         notes,
         location: null,
       });
     });
   }
 
-  /** Per-instance in-memory write — same validation + error codes as FS mode. */
+  /** In-memory write — same validation + error codes as FS mode. */
   async updateApplication(
     input: UpdateApplicationInput,
   ): Promise<UpdateApplicationResult> {
@@ -261,21 +218,45 @@ export class DemoDataSource implements DataSource {
     return { application: updated, notesSanitized };
   }
 
-  async getReport(_num: number): Promise<Report | null> {
-    return null; // M7: fictional English reports
+  /* ------------------------------------------------------ Reports (M3) --- */
+
+  /** Parse the fixture report through the REAL parser (one code path). */
+  async getReport(num: number): Promise<Report | null> {
+    const fixture = DEMO_REPORTS.find((r) => r.num === num);
+    if (!fixture) return null;
+    return parseReport({
+      content: fixture.content,
+      path: fixture.path,
+      num: fixture.num,
+    });
   }
 
   async getReportFacets(): Promise<ReportFacet[]> {
-    return []; // M7: facets for the fictional reports
+    return DEMO_REPORTS.map((fixture) =>
+      reportFacet(
+        parseReport({
+          content: fixture.content,
+          path: fixture.path,
+          num: fixture.num,
+        }),
+      ),
+    );
   }
 
-  async getDocuments(_num: number): Promise<Document[]> {
-    return []; // M7: placeholder PDFs
+  async getDocuments(num: number): Promise<Document[]> {
+    return DEMO_DOCUMENTS[num] ?? [];
   }
+
+  /* --------------------------------------------------- Follow-ups (M4) --- */
 
   async getFollowUps(): Promise<FollowUpData> {
+    const seeded = seededLogs();
+    const offset = seeded.length;
     return {
-      logs: [...demoLogs],
+      logs: [
+        ...seeded,
+        ...demoSessionLogs.map((l, i) => ({ ...l, num: offset + i + 1 })),
+      ],
       pins: [...demoPins.entries()].map(([appNum, p]) => ({
         appNum,
         date: p.date,
@@ -287,18 +268,23 @@ export class DemoDataSource implements DataSource {
   async getFollowUpCadence(): Promise<FollowUpCadence> {
     const today = todayISO();
     const apps = await this.getApplications();
+    const { logs } = await this.getFollowUps();
+    const seedByNum = new Map(DEMO_FOLLOW_UP_SEEDS.map((s) => [s.appNum, s]));
+
     const entries: CadenceEntry[] = apps
       .filter((a) => a.statusId && DEMO_ACTIONABLE_IDS.has(a.statusId))
       .map((a): CadenceEntry => {
-        const offset = DEMO_APPLIED_OFFSET[a.num] ?? 5;
-        const appliedDate = addDaysISO(today, -offset);
-        const logsForApp = demoLogs.filter((l) => l.appNum === a.num);
+        const seed = seedByNum.get(a.num);
+        const dueInDays = seed?.dueInDays ?? 5;
         const pin = demoPins.get(a.num);
-        const nextFollowupDate =
-          pin?.date ?? addDaysISO(appliedDate, DEMO_APPLIED_FIRST);
+        const nextFollowupDate = pin?.date ?? addDaysISO(today, dueInDays);
+        // Applied date back-derived so the cadence stays internally coherent.
+        const appliedDate = addDaysISO(nextFollowupDate, -APPLIED_FIRST);
+        const logsForApp = logs.filter((l) => l.appNum === a.num);
+        const lastLog = logsForApp[logsForApp.length - 1];
         const daysUntilNext = daysBetweenISO(today, nextFollowupDate);
         const urgency: FollowUpUrgency =
-          daysUntilNext <= 0 ? "overdue" : "waiting";
+          daysUntilNext < 0 ? "overdue" : daysUntilNext === 0 ? "urgent" : "waiting";
         return {
           num: a.num,
           date: a.date,
@@ -308,10 +294,12 @@ export class DemoDataSource implements DataSource {
           status: a.statusId as string,
           score: a.scoreRaw,
           notes: a.notes,
-          reportPath: null,
+          reportPath: a.reportPath,
           contacts: [],
-          daysSinceApplication: offset,
-          daysSinceLastFollowup: logsForApp.length ? 0 : null,
+          daysSinceApplication: Math.max(daysBetweenISO(appliedDate, today), 0),
+          daysSinceLastFollowup: lastLog
+            ? Math.max(daysBetweenISO(lastLog.date, today), 0)
+            : null,
           followupCount: logsForApp.length,
           urgency,
           nextFollowupDate,
@@ -319,13 +307,16 @@ export class DemoDataSource implements DataSource {
           daysUntilNext,
         };
       });
+
     const order: Record<FollowUpUrgency, number> = {
       urgent: 0,
       overdue: 1,
       waiting: 2,
       cold: 3,
     };
-    entries.sort((x, y) => order[x.urgency] - order[y.urgency]);
+    entries.sort(
+      (x, y) => order[x.urgency] - order[y.urgency] || x.num - y.num,
+    );
     return {
       metadata: {
         analysisDate: today,
@@ -337,14 +328,7 @@ export class DemoDataSource implements DataSource {
         waiting: entries.filter((e) => e.urgency === "waiting").length,
       },
       entries,
-      cadenceConfig: {
-        applied_first: DEMO_APPLIED_FIRST,
-        applied_subsequent: 7,
-        applied_max_followups: 2,
-        responded_initial: 1,
-        responded_subsequent: 3,
-        interview_thankyou: 1,
-      },
+      cadenceConfig: { ...DEMO_CADENCE_CONFIG },
     };
   }
 
@@ -370,10 +354,9 @@ export class DemoDataSource implements DataSource {
         `Application #${input.num} not found in the demo dataset.`,
       );
     }
-    const num = demoLogs.reduce((m, l) => Math.max(m, l.num), 0) + 1;
     const date = input.date ?? todayISO();
-    demoLogs.push({
-      num,
+    demoSessionLogs.push({
+      num: 0, // renumbered on read, after the dynamic seeded logs
       appNum: input.num,
       date,
       company: app.company,
@@ -382,7 +365,8 @@ export class DemoDataSource implements DataSource {
       contact: sanitizeNotes(input.contact ?? ""),
       notes: sanitizeNotes(input.notes ?? ""),
     });
-    return { ok: true, date, kind: "log", num };
+    const { logs } = await this.getFollowUps();
+    return { ok: true, date, kind: "log", num: logs[logs.length - 1].num };
   }
 
   /* --------------------------------------------------- Outreach (M6) --- */
@@ -442,6 +426,8 @@ export class DemoDataSource implements DataSource {
     };
   }
 
+  /* ------------------------------------------------- Discovery (M5) --- */
+
   async getPipelineItems(): Promise<PipelineItem[]> {
     return parsePipeline(DEMO_PIPELINE_MD);
   }
@@ -450,114 +436,17 @@ export class DemoDataSource implements DataSource {
     return DEMO_SCAN_HISTORY.map((r) => scanRecordSchema.parse(r));
   }
 
-  /** Static plausible analysis consistent with the demo apps. Minimal for M5;
-   * the full ~30-app anonymized dataset (and a matching richer analysis) is
-   * M7. Parsed through patternsSchema so demo drift fails loudly in tests. */
+  /** Analytics DERIVED from the fixture dataset (fixtures/patterns.ts) with
+   * the same outcome/channel math as the real code paths, then re-validated
+   * through patternsSchema so fixture drift fails loudly in tests. */
   async getPatterns(): Promise<PatternsResult> {
-    return { kind: "ok", patterns: patternsSchema.parse(DEMO_PATTERNS) };
+    const [apps, facets] = await Promise.all([
+      this.getApplications(),
+      this.getReportFacets(),
+    ]);
+    return {
+      kind: "ok",
+      patterns: patternsSchema.parse(buildDemoPatterns(apps, facets, todayISO())),
+    };
   }
 }
-
-/**
- * Demo Discovery inbox — same markdown dialect as the real data/pipeline.md,
- * run through the real parser so demo and FS modes exercise one code path.
- * All companies invented.
- */
-const DEMO_PIPELINE_MD = `# Pipeline — Pending URLs
-
-## Pending
-- [ ] https://jobs.example.com/nimbus-labs/design-engineer-motion | Nimbus Labs | Design Engineer (Motion) | Remote EU | ⭐ exact archetype
-- [ ] https://jobs.example.com/vectorline/frontend-platform | Vectorline | Frontend Engineer, Platform | Amsterdam
-- [ ] https://jobs.example.com/quartzworks/ui-engineer-design-system | Quartzworks | UI Engineer, Design System | Paris/remote
-
-## Processed
-- [x] #004 | https://jobs.example.com/helioscope/product-engineer | Helioscope | Product Engineer | 4.1/5 | PDF ✅
-- [x] #006 | https://jobs.example.com/lumen-systems/frontend-ai-tools | Lumen Systems | Frontend Engineer, AI Tools | 3.9/5 | PDF ✅
-- [dup] https://jobs.example.com/helioscope/product-engineer-eu | Helioscope | Product Engineer (EU) | duplicate of #004
-- [skip] Parallax Digital | Creative Developer | SKIP — posting closed before applying
-- [screened] Batch scan: 12 offers screened out (US-only or heavy backend focus), available on request.
-`;
-
-/** Demo scanner history (invented companies, dynamic-free dates). */
-const DEMO_SCAN_HISTORY = [
-  { url: "https://jobs.example.com/nimbus-labs/design-engineer-motion", firstSeen: "2026-06-20", portal: "greenhouse-api", title: "Design Engineer (Motion)", company: "Nimbus Labs", status: "added", location: "Remote EU" },
-  { url: "https://jobs.example.com/vectorline/frontend-platform", firstSeen: "2026-06-20", portal: "ashby-api", title: "Frontend Engineer, Platform", company: "Vectorline", status: "added", location: "Amsterdam, Netherlands" },
-  { url: "https://jobs.example.com/helioscope/product-engineer", firstSeen: "2026-06-08", portal: "lever-api", title: "Product Engineer", company: "Helioscope", status: "added", location: "Remote (EU)" },
-  { url: "https://jobs.example.com/lumen-systems/frontend-ai-tools", firstSeen: "2026-06-14", portal: "greenhouse-api", title: "Frontend Engineer, AI Tools", company: "Lumen Systems", status: "added", location: "Berlin, Germany" },
-  { url: "https://jobs.example.com/quartzworks/ui-engineer-design-system", firstSeen: "2026-06-22", portal: "ashby-api", title: "UI Engineer, Design System", company: "Quartzworks", status: "skipped-title", location: "Paris, France" },
-];
-
-/** Plausible analyze-patterns payload for the 8 demo apps. minSampleForClaim
- * is 3 here (vs the CLI's 8) so the demo shows both the accented and the
- * grayed low-n vendor bars. */
-const DEMO_PATTERNS = {
-  metadata: {
-    total: 8,
-    dateRange: { from: "2026-06-02", to: "2026-06-24" },
-    analysisDate: todayISO(),
-    byOutcome: { positive: 3, negative: 1, self_filtered: 2, pending: 2 },
-  },
-  funnel: {
-    evaluated: 1,
-    applied: 1,
-    responded: 1,
-    interview: 1,
-    offer: 1,
-    rejected: 1,
-    discarded: 1,
-    skip: 1,
-  },
-  scoreComparison: {
-    positive: { avg: 4.0, min: 3.5, max: 4.4, count: 3 },
-    negative: { avg: 3.9, min: 3.9, max: 3.9, count: 1 },
-    self_filtered: { avg: 2.65, min: 2.4, max: 2.9, count: 2 },
-    pending: { avg: 3.5, min: 3.2, max: 3.8, count: 2 },
-  },
-  archetypeBreakdown: [
-    { archetype: "Design Engineer", total: 3, positive: 2, negative: 0, self_filtered: 0, pending: 1, conversionRate: 67 },
-    { archetype: "Frontend Engineer", total: 3, positive: 0, negative: 1, self_filtered: 1, pending: 1, conversionRate: 0 },
-    { archetype: "Product Engineer", total: 2, positive: 1, negative: 0, self_filtered: 1, pending: 0, conversionRate: 50 },
-  ],
-  blockerAnalysis: [
-    { blocker: "seniority-bar", frequency: 2, percentage: 25 },
-  ],
-  remotePolicy: [
-    { policy: "global remote", total: 4, positive: 2, negative: 0, self_filtered: 1, pending: 1, conversionRate: 50 },
-    { policy: "hybrid/onsite", total: 4, positive: 1, negative: 1, self_filtered: 1, pending: 1, conversionRate: 25 },
-  ],
-  companySizeBreakdown: [
-    { size: "unknown", total: 8, conversionRate: 38 },
-  ],
-  vendorAnalysis: {
-    scope: ["greenhouse", "lever", "ashby", "workday"],
-    minSampleForClaim: 3,
-    submitted: 6,
-    identified: 6,
-    coveragePct: 100,
-    overallAdvanceRate: 50,
-    breakdown: [
-      { vendor: "greenhouse", total: 3, advanced: 2, advanceRate: 67, sharePct: 50, sufficientSample: true },
-      { vendor: "lever", total: 2, advanced: 1, advanceRate: 50, sharePct: 33, sufficientSample: false },
-      { vendor: "ashby", total: 1, advanced: 0, advanceRate: 0, sharePct: 17, sufficientSample: false },
-    ],
-    citation: "Bommasani et al., Algorithmic Monocultures in Hiring, FAccT 2026 (arXiv:2605.27371)",
-  },
-  scoreThreshold: {
-    recommended: 3.5,
-    reasoning: "Lowest score among positive outcomes is 3.5. No applications below this score led to progress.",
-    positiveRange: "3.5 - 4.4",
-  },
-  techStackGaps: [{ skill: "Ruby", frequency: 1 }],
-  recommendations: [
-    {
-      action: "Set minimum score threshold at 3.5/5 before generating PDFs",
-      reasoning: "No positive outcomes below 3.5/5. Scores below this are wasted effort.",
-      impact: "medium",
-    },
-    {
-      action: 'Double down on "Design Engineer" roles (67% conversion rate)',
-      reasoning: "2 of 3 applications in this archetype led to positive outcomes.",
-      impact: "medium",
-    },
-  ],
-};

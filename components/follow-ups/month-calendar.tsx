@@ -61,7 +61,9 @@ function DayCell({ day }: { day: CalendarDay }) {
     <div
       className={cn(
         "min-h-24 border-b border-r p-1.5 last:border-r-0 [&:nth-child(7n)]:border-r-0",
-        !day.inMonth && "bg-muted/20 text-muted-foreground/50",
+        // Out-of-month days de-emphasize via the tinted cell only — the day
+        // number stays full muted-foreground so it keeps AA contrast.
+        !day.inMonth && "bg-muted/20",
       )}
     >
       <div className="mb-1 flex items-center justify-end">
@@ -70,9 +72,7 @@ function DayCell({ day }: { day: CalendarDay }) {
             "inline-flex size-5 items-center justify-center rounded-full font-mono text-xs tabular-nums",
             day.isToday
               ? "bg-primary font-semibold text-primary-foreground"
-              : day.inMonth
-                ? "text-muted-foreground"
-                : "text-muted-foreground/50",
+              : "text-muted-foreground",
           )}
         >
           {day.day}

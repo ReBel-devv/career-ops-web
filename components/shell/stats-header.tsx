@@ -86,7 +86,8 @@ export function StatsHeader() {
       >
         <Search className="size-3.5" aria-hidden />
         Search
-        <kbd className="rounded border bg-muted px-1 font-mono text-[10px]">⌘K</kbd>
+        {/* text-foreground: inherits muted-foreground otherwise, which fails AA on bg-muted in light. */}
+        <kbd className="rounded border bg-muted px-1 font-mono text-[10px] text-foreground">⌘K</kbd>
       </button>
       <AvatarMenu />
     </header>
