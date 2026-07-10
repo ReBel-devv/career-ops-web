@@ -7,6 +7,7 @@ import {
   KeyboardSensor,
   PointerSensor,
   closestCorners,
+  defaultDropAnimationSideEffects,
   pointerWithin,
   useDraggable,
   useDroppable,
@@ -18,6 +19,7 @@ import {
   type DragStartEvent,
   type DropAnimation,
 } from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import { ApplicationCard } from "@/components/board/application-card";
 import { MoveStatusMenu } from "@/components/board/move-status-menu";
@@ -29,13 +31,31 @@ import type { BoardColumn } from "@/lib/grouping";
 import { cn } from "@/lib/utils";
 
 /**
- * Drop animation: a smooth, slightly emphasized decelerate curve so the card
- * settles rather than snaps. The overlay tilt/scale is reset over the same
- * window for a natural "set down" feel.
+ * Drop animation. dnd-kit's default flies the overlay back to the dragged
+ * card's ORIGINAL slot ("return to source") — but our move is optimistic, so
+ * the real card is already in the target column and the returning overlay read
+ * as a duplicate snapping backwards. Instead we **dissolve the overlay in
+ * place** (fade + a hair of shrink) right where it was dropped; the settled
+ * card (see `card-drop-in`) carries the "landed" feel. `sideEffects` hides the
+ * source node during the fade so there is never a second visible card.
  */
 const dropAnimation: DropAnimation = {
-  duration: 220,
+  duration: 170,
   easing: "cubic-bezier(0.2, 0, 0, 1)",
+  keyframes: ({ transform }) => [
+    { opacity: 1, transform: CSS.Transform.toString(transform.initial) },
+    {
+      opacity: 0,
+      transform: CSS.Transform.toString({
+        ...transform.initial,
+        scaleX: transform.initial.scaleX * 0.96,
+        scaleY: transform.initial.scaleY * 0.96,
+      }),
+    },
+  ],
+  sideEffects: defaultDropAnimationSideEffects({
+    styles: { active: { opacity: "0" } },
+  }),
 };
 
 /**
@@ -65,6 +85,9 @@ export function KanbanBoard({
 }) {
   const reducedMotion = usePrefersReducedMotion();
   const [activeApp, setActiveApp] = useState<Application | null>(null);
+  // The card that just landed via drag — drives its one-shot "settle" animation
+  // in the destination column, cleared shortly after.
+  const [justMovedNum, setJustMovedNum] = useState<number | null>(null);
 
   // Columns are the droppables (no intra-column sorting). `closestCorners`
   // alone is unreliable once a column is tall enough to overflow: its far
@@ -121,7 +144,15 @@ export function KanbanBoard({
     if (!over) return;
     const app = byNum.get(Number(active.id));
     const targetStatusId = String(over.id);
-    if (app && app.statusId !== targetStatusId) onMove(app, targetStatusId);
+    if (app && app.statusId !== targetStatusId) {
+      onMove(app, targetStatusId);
+      // Play the destination "settle" on the card that just moved.
+      setJustMovedNum(app.num);
+      window.setTimeout(
+        () => setJustMovedNum((n) => (n === app.num ? null : n)),
+        320,
+      );
+    }
   }
 
   return (
@@ -143,6 +174,7 @@ export function KanbanBoard({
             disabled={disabled}
             overdueNums={overdueNums}
             outreachByNum={outreachByNum}
+            justMovedNum={justMovedNum}
           />
         ))}
       </div>
@@ -153,8 +185,9 @@ export function KanbanBoard({
             app={activeApp}
             className={cn(
               "w-64 cursor-grabbing shadow-2xl ring-1 ring-foreground/10",
-              // Picked-up feel: a slight tilt + lift. Skipped under reduced motion.
-              !reducedMotion && "rotate-[2deg] scale-[1.03]",
+              // Picked-up feel: a light lift + a hair of tilt — enough to feel
+              // physical, not theatrical. Skipped under reduced motion.
+              !reducedMotion && "rotate-[1.5deg] scale-[1.03]",
             )}
           />
         ) : null}
@@ -170,6 +203,7 @@ function Column({
   disabled,
   overdueNums,
   outreachByNum,
+  justMovedNum,
 }: {
   column: BoardColumn;
   states: CanonicalState[];
@@ -177,6 +211,7 @@ function Column({
   disabled: boolean;
   overdueNums?: Set<number>;
   outreachByNum?: Map<number, OutreachCardHint>;
+  justMovedNum?: number | null;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.state.id });
   const dot = STATUS_DOT_CLASS[column.state.dashboardGroup] ?? "bg-muted-foreground/40";
@@ -213,6 +248,7 @@ function Column({
             disabled={disabled}
             overdue={overdueNums?.has(app.num) ?? false}
             outreach={outreachByNum?.get(app.num)}
+            justDropped={justMovedNum === app.num}
           />
         ))}
         {column.applications.length === 0 ? (
@@ -232,6 +268,7 @@ function DraggableCard({
   disabled,
   overdue,
   outreach,
+  justDropped = false,
 }: {
   app: Application;
   states: CanonicalState[];
@@ -239,6 +276,7 @@ function DraggableCard({
   disabled: boolean;
   overdue: boolean;
   outreach?: OutreachCardHint;
+  justDropped?: boolean;
 }) {
   const {
     attributes,
@@ -266,6 +304,8 @@ function DraggableCard({
       className={cn(
         !disabled && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-40 ring-1 ring-border",
+        // One-shot "settle" as the card lands in its new column.
+        justDropped && "motion-safe:animate-card-drop-in",
       )}
       action={
         <>

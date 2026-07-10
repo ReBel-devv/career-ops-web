@@ -87,6 +87,9 @@
   /* Accordion collapse (report blocks) — respects prefers-reduced-motion. */
   --animate-accordion-down: accordion-down 0.2s ease-out;
   --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  /* One-shot "settle" for a card that just landed in a new board column. */
+  --animate-card-drop-in: card-drop-in 0.3s cubic-bezier(0.2, 0, 0, 1);
 }
 
 @keyframes accordion-down {
@@ -104,6 +107,22 @@
   }
   to {
     height: 0;
+  }
+}
+
+/* Card lands in its new column: a soft rise + scale so it "settles" rather than
+ * pops in. Pairs with the overlay dissolving in place (no fly-back to source). */
+@keyframes card-drop-in {
+  0% {
+    opacity: 0.5;
+    transform: translateY(-3px) scale(0.965);
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
   }
 }
 
