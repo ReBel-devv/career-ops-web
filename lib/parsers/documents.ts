@@ -45,7 +45,7 @@ export function parsePdfIndex(content: string): PdfIndexEntry[] {
   return entries;
 }
 
-/** `001-mistral-ai-2026-07-04.md` → `mistral-ai` (null when it doesn't match). */
+/** `001-nimbus-labs-2026-06-02.md` → `nimbus-labs` (null when it doesn't match). */
 export function companySlugFromReportFilename(filename: string): string | null {
   const m = /^\d+-(.+?)-\d{4}-\d{2}-\d{2}\.md$/.exec(filename);
   return m ? m[1] : null;

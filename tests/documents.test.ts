@@ -19,7 +19,7 @@ const INDEX = [
   "# report\tpdf\thtml\tformat\tdate — written by generate-pdf.mjs, do not edit",
   "001\toutput/cv-x-nimbus-labs-2026-06-01.pdf\toutput/cv-x-nimbus-labs.html\ta4\t2026-06-01",
   "\toutput/nimbus-labs-design-engineer-cover.pdf\t\ta4\t2026-06-01",
-  "013\toutput/cv-x-contentful-2026-07-05.pdf\toutput/cv-x-contentful.html\ta4\t2026-07-05",
+  "013\toutput/cv-x-emberfield-2026-07-05.pdf\toutput/cv-x-emberfield.html\ta4\t2026-07-05",
 ].join("\n");
 
 const OUTPUT = [
@@ -45,8 +45,8 @@ describe("companySlugFromReportFilename", () => {
       "nimbus-labs",
     );
     expect(
-      companySlugFromReportFilename("029-poolside-design-engineer-full-experience-2026-07-06.md"),
-    ).toBe("poolside-design-engineer-full-experience");
+      companySlugFromReportFilename("029-quayside-design-engineer-full-remit-2026-07-06.md"),
+    ).toBe("quayside-design-engineer-full-remit");
     expect(companySlugFromReportFilename("notes.md")).toBeNull();
   });
 });
@@ -84,9 +84,9 @@ describe("matchDocuments", () => {
   it("never returns files that are not on disk (index points at a missing pdf)", () => {
     const docs = matchDocuments({
       num: 13,
-      reportFilename: "013-contentful-2026-07-05.md",
+      reportFilename: "013-emberfield-2026-07-05.md",
       indexEntries,
-      outputFiles: OUTPUT, // no contentful files present
+      outputFiles: OUTPUT, // no emberfield files present
     });
     expect(docs).toEqual([]);
   });

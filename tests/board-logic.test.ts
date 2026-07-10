@@ -145,13 +145,13 @@ describe("filters — archived hiding (Decision 8)", () => {
 });
 
 describe("filters — search / status / score / date compose with AND", () => {
-  const a = makeApp({ statusRaw: "Applied", score: 4.3, company: "Mistral AI", role: "Frontend", date: "2026-07-05", notes: "React/Next" });
-  const b = makeApp({ statusRaw: "Applied", score: 3.2, company: "Poolside", role: "Design Engineer", date: "2026-07-06", notes: "vision produit" });
-  const c = makeApp({ statusRaw: "Evaluated", score: 2.0, company: "Aircall", role: "Senior FE", date: "2026-07-04", notes: "backend heavy" });
+  const a = makeApp({ statusRaw: "Applied", score: 4.3, company: "Halcyon Grid", role: "Frontend", date: "2026-07-05", notes: "React/Next" });
+  const b = makeApp({ statusRaw: "Applied", score: 3.2, company: "Quayside", role: "Design Engineer", date: "2026-07-06", notes: "vision produit" });
+  const c = makeApp({ statusRaw: "Evaluated", score: 2.0, company: "Copperleaf", role: "Senior FE", date: "2026-07-04", notes: "backend heavy" });
   const all = [a, b, c];
 
   it("free-text search matches company/role/notes", () => {
-    expect(filterApplications(all, { ...EMPTY_FILTERS, q: "mistral" })).toEqual([a]);
+    expect(filterApplications(all, { ...EMPTY_FILTERS, q: "halcyon" })).toEqual([a]);
     expect(filterApplications(all, { ...EMPTY_FILTERS, q: "design engineer" })).toEqual([b]);
     expect(filterApplications(all, { ...EMPTY_FILTERS, q: "backend" })).toEqual([c]);
   });
@@ -187,7 +187,7 @@ describe("filters — search / status / score / date compose with AND", () => {
 describe("filters — URL param round-trip", () => {
   it("parses and reserializes without losing information", () => {
     const f = {
-      q: "mistral",
+      q: "halcyon",
       statuses: ["applied", "offer"],
       scoreMin: 3.5,
       scoreMax: null,

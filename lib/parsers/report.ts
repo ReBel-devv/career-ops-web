@@ -248,7 +248,7 @@ export function bucketLocation(text?: string): LocationBucket | null {
 
 export interface ParseReportInput {
   content: string;
-  /** Path relative to the data repo root, e.g. `reports/001-mistral-ai-2026-07-04.md`. */
+  /** Path relative to the data repo root, e.g. `reports/001-nimbus-labs-2026-06-02.md`. */
   path: string;
   num: number;
 }
