@@ -27,11 +27,15 @@ import {
  */
 
 const HEADING_RE = /^##\s+(.*)$/;
-const ITEM_RE = /^-\s*\[(\s*|x|dup|skip|screened)\]\s*(.*)$/i;
+const ITEM_RE = /^-\s*\[(\s*|x|dup|skip|screened|!)\]\s*(.*)$/i;
 const URL_RE = /^https?:\/\/\S+$/i;
 const REPORT_NUM_RE = /^#(\d+)$/;
 const SCORE_RE = /^\d+(?:\.\d+)?\/5$/;
 const PDF_RE = /^PDF\b/i;
+/** `local:jds/…` cell — a JD stored in the repo (manual `[!]` offers). */
+const LOCAL_RE = /^local:(\S+)/i;
+/** Labeled segments `posted:`/`note:` — positional-agnostic, never company/role. */
+const LABEL_RE = /^(?:posted|note):/i;
 
 function kindOf(marker: string): PipelineItemKind {
   const m = marker.trim().toLowerCase();
@@ -39,6 +43,7 @@ function kindOf(marker: string): PipelineItemKind {
   if (m === "x") return "done";
   if (m === "dup") return "dup";
   if (m === "skip") return "skip";
+  if (m === "!") return "manual";
   return "screened";
 }
 
@@ -69,6 +74,7 @@ export function parsePipeline(content: string): PipelineItem[] {
     let scoreRaw: string | null = null;
     let company: string | null = null;
     let role: string | null = null;
+    let localJd: string | null = null;
 
     // A screened line is a free-prose batch summary — no per-offer structure.
     if (kind !== "screened") {
@@ -76,18 +82,22 @@ export function parsePipeline(content: string): PipelineItem[] {
       for (const cell of body.split("|").map((c) => c.trim())) {
         if (cell === "") continue;
         const num = REPORT_NUM_RE.exec(cell);
+        const local = LOCAL_RE.exec(cell);
         if (num && reportNum === null) {
           reportNum = Number.parseInt(num[1], 10);
         } else if (url === null && URL_RE.test(cell)) {
           url = cell;
         } else if (scoreRaw === null && SCORE_RE.test(cell)) {
           scoreRaw = cell;
-        } else if (!PDF_RE.test(cell)) {
+        } else if (local && localJd === null) {
+          localJd = local[1]; // the path after `local:` (e.g. jds/…-slug.md)
+        } else if (!PDF_RE.test(cell) && !LABEL_RE.test(cell)) {
+          // Skip `local:`, `posted:`/`note:`, PDF and #num/url/score cells so
+          // `company | role` land correctly even when they are absent (a manual
+          // `[!] url | local:jds/…` line has no company/role → both stay null).
           rest.push(cell);
         }
       }
-      // After stripping #num / url / score / PDF cells, the convention is
-      // `company | role | …meta` — extra meta cells stay in `raw` only.
       company = rest[0] ?? null;
       role = rest[1] ?? null;
     }
@@ -95,13 +105,14 @@ export function parsePipeline(content: string): PipelineItem[] {
     items.push(
       pipelineItemSchema.parse({
         // Items before any recognized heading fall back to the kind's home.
-        section: section ?? (kind === "pending" ? "pending" : "processed"),
+        section: section ?? (kind === "pending" || kind === "manual" ? "pending" : "processed"),
         kind,
         url,
         company,
         role,
         reportNum,
         scoreRaw,
+        localJd,
         raw: line,
       }),
     );

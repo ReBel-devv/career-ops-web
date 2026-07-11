@@ -7,6 +7,7 @@ import {
   parseReportCell,
   parseScoreCell,
   scanRecordSchema,
+  type AddManualOfferInput,
   type AddOutreachContactInput,
   type Application,
   type CanonicalState,
@@ -43,12 +44,14 @@ import {
   runTrackerSync,
 } from "@/lib/scripts";
 import {
+  addManualOffer,
   addOutreachContact,
   appendFollowUpLog,
   deleteOutreachContact,
   FollowUpWriteError,
   OutreachWriteError,
   parseOutreachDoc,
+  PipelineWriteError,
   TrackerWriteError,
   updateOutreachContact,
   writeTrackerCell,
@@ -397,6 +400,17 @@ export class FsDataSource implements DataSource {
       throw error;
     }
     return parsePipeline(content);
+  }
+
+  /** Append a manual `[!]` offer (JD saved to jds/, line added to pipeline.md). */
+  async addManualOffer(input: AddManualOfferInput): Promise<PipelineItem> {
+    if (getConfig().readOnly) {
+      throw new PipelineWriteError(
+        "READ_ONLY",
+        "READ_ONLY is set — all mutations are disabled.",
+      );
+    }
+    return addManualOffer(this.repoPath, input);
   }
 
   /** analyze-patterns.mjs --json, zod-validated (never recomputed). */

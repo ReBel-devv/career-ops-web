@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { usePipelineItems } from "@/lib/client/queries";
 import { parseScoreCell } from "@/lib/domain/parse";
 import type { PipelineItem, PipelineItemKind } from "@/lib/domain";
+import { cn } from "@/lib/utils";
 
 /**
  * Pipeline inbox tab — data/pipeline.md, READ-ONLY (plan §3 Discovery: zero
@@ -93,6 +94,7 @@ const KIND_LABEL: Record<PipelineItemKind, string> = {
   dup: "dup",
   skip: "skip",
   screened: "screened",
+  manual: "manual",
 };
 
 function PipelineRow({ item }: { item: PipelineItem }) {
@@ -119,7 +121,9 @@ function PipelineRow({ item }: { item: PipelineItem }) {
           #{String(item.reportNum).padStart(3, "0")}
         </Link>
       ) : null}
-      <span className="text-data font-medium">{item.company ?? "—"}</span>
+      <span className="text-data font-medium">
+        {item.company ?? (item.kind === "manual" ? "Awaiting evaluation" : "—")}
+      </span>
       <span className="text-data text-muted-foreground">{item.role ?? ""}</span>
       {item.scoreRaw ? (
         <ScoreBadge raw={item.scoreRaw} score={parseScoreCell(item.scoreRaw)} />
@@ -143,7 +147,16 @@ function PipelineRow({ item }: { item: PipelineItem }) {
 
 function KindBadge({ kind }: { kind: PipelineItemKind }) {
   return (
-    <span className="inline-flex shrink-0 rounded-sm border px-1.5 py-0.5 font-mono text-[11px] leading-none text-muted-foreground">
+    <span
+      className={cn(
+        "inline-flex shrink-0 rounded-sm border px-1.5 py-0.5 font-mono text-[11px] leading-none",
+        // Manual adds (dashboard) get a subtle accent so they stand out from
+        // scanner-written pending rows.
+        kind === "manual"
+          ? "border-primary/40 text-primary"
+          : "text-muted-foreground",
+      )}
+    >
       {KIND_LABEL[kind]}
     </span>
   );

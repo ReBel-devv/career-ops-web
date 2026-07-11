@@ -114,3 +114,42 @@ describe("parsePipeline", () => {
     expect(noHeadings[1].section).toBe("processed");
   });
 });
+
+describe("parsePipeline — manual [!] offers (dashboard-added, un-fetchable JD)", () => {
+  it("recognizes [!] as a manual pending item and captures the local JD ref", () => {
+    const items = parsePipeline(
+      "## Pending\n- [!] https://www.welcometothejungle.com/fr/companies/acme/jobs/frontend | local:jds/007-welcometothejungle-frontend.md | note: added via dashboard 2026-07-11\n",
+    );
+    expect(items).toHaveLength(1);
+    const [item] = items;
+    expect(item.kind).toBe("manual");
+    expect(item.section).toBe("pending");
+    expect(item.url).toBe(
+      "https://www.welcometothejungle.com/fr/companies/acme/jobs/frontend",
+    );
+    expect(item.localJd).toBe("jds/007-welcometothejungle-frontend.md");
+  });
+
+  it("keeps company/role null when absent — local:/note: never leak into them", () => {
+    const [item] = parsePipeline(
+      "- [!] https://linkedin.com/jobs/view/42 | local:jds/008-linkedin-42.md | note: manual\n",
+    );
+    expect(item.company).toBeNull();
+    expect(item.role).toBeNull();
+    expect(item.localJd).toBe("jds/008-linkedin-42.md");
+  });
+
+  it("still parses company/role when the manual line carries them", () => {
+    const [item] = parsePipeline(
+      "- [!] https://linkedin.com/jobs/view/9 | Larkspur | Frontend Engineer | local:jds/009-larkspur.md\n",
+    );
+    expect(item.company).toBe("Larkspur");
+    expect(item.role).toBe("Frontend Engineer");
+    expect(item.localJd).toBe("jds/009-larkspur.md");
+  });
+
+  it("defaults localJd to null for non-manual rows", () => {
+    const [pending] = parsePipeline("- [ ] https://jobs.example.com/x | X Co | Role\n");
+    expect(pending.localJd).toBeNull();
+  });
+});

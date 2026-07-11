@@ -1,4 +1,5 @@
 import type {
+  AddManualOfferInput,
   AddOutreachContactInput,
   Application,
   CanonicalState,
@@ -52,6 +53,14 @@ export interface DataSource {
   getFollowUpCadence(): Promise<FollowUpCadence>;
   /** Pipeline inbox items, pending + processed. (M5) */
   getPipelineItems(): Promise<PipelineItem[]>;
+  /**
+   * Append a MANUAL `[!]` offer to `data/pipeline.md`: saves the pasted JD to
+   * `jds/{NNN}-{slug}.md` and inserts a `- [!] {url} | local:jds/… ` line at the
+   * top of Pending. Queue-only — the CLI `pipeline` mode does the evaluation.
+   * Throws `PipelineWriteError` (INVALID_INPUT/LOCK_TIMEOUT/PARSE_FAILED) or a
+   * READ_ONLY error. Returns the created item.
+   */
+  addManualOffer(input: AddManualOfferInput): Promise<PipelineItem>;
   /** Scanner dedup history. */
   getScanHistory(): Promise<ScanRecord[]>;
   /** Rejection-pattern analytics from `analyze-patterns.mjs --json` — never

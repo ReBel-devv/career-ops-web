@@ -50,3 +50,18 @@ export {
   updateOutreachContact,
   type OutreachWriteErrorCode,
 } from "./outreach-writer";
+export {
+  acquirePipelineLock,
+  pipelineLockDirFor,
+  pipelinePathFor,
+  PipelineLockTimeoutError,
+  type PipelineLockHandle,
+  type PipelineLockOptions,
+} from "./pipeline-lock";
+export {
+  addManualOffer,
+  insertPendingLine,
+  PipelineWriteError,
+  slugFromUrl,
+  type PipelineWriteErrorCode,
+} from "./pipeline-writer";

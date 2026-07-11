@@ -30,6 +30,7 @@ import {
   type OutreachContactKind,
   type OutreachRecord,
   type OutreachStage,
+  type AddManualOfferInput,
   type PatternsResult,
   type PipelineItem,
   type Report,
@@ -199,6 +200,32 @@ export function usePipelineItems() {
     queryFn: async (): Promise<PipelineItem[]> => {
       const json = await fetchJson("/api/pipeline");
       return pipelineResponse.parse(json).items;
+    },
+  });
+}
+
+const addManualOfferResponse = z.object({ item: pipelineItemSchema });
+
+/**
+ * Add a manual `[!]` offer (URL + pasted JD) to the pipeline inbox. Queue-only:
+ * saves the JD to `jds/` and appends a pending line; the CLI evaluates it later.
+ * Invalidates the pipeline query so the Discovery inbox reflects the add.
+ */
+export function useAddManualOffer() {
+  const qc = useQueryClient();
+  return useMutation<PipelineItem, Error, AddManualOfferInput>({
+    mutationFn: async (input) => {
+      const res = await fetch("/api/pipeline", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+      return addManualOfferResponse.parse(json).item;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["pipeline"] });
     },
   });
 }

@@ -1,8 +1,11 @@
 import {
+  addManualOfferInputSchema,
   applicationSchema,
   patternsSchema,
+  pipelineItemSchema,
   scanRecordSchema,
   statesFileSchema,
+  type AddManualOfferInput,
   type AddOutreachContactInput,
   type Application,
   type CanonicalState,
@@ -35,8 +38,10 @@ import {
   applyUpdateContact,
   FollowUpWriteError,
   OutreachWriteError,
+  PipelineWriteError,
   resolveWritableStatus,
   sanitizeNotes,
+  slugFromUrl,
   TrackerWriteError,
 } from "@/lib/writers";
 import { parsePipeline } from "@/lib/parsers/pipeline";
@@ -92,6 +97,10 @@ const demoSessionLogs: FollowUpLog[] = [];
 /** In-memory outreach document, seeded from fixtures. Mutated through the SAME
  * pure apply* functions the FS writer uses. */
 let demoOutreach: OutreachDoc = buildDemoOutreach();
+
+/** Manually-added `[!]` offers (session-only). Prepended to the parsed fixture
+ * pipeline so the Discovery inbox reflects the add without touching any file. */
+const demoManualOffers: PipelineItem[] = [];
 
 const DEMO_ACTIONABLE_IDS = new Set(["applied", "responded", "interview"]);
 const APPLIED_FIRST = DEMO_CADENCE_CONFIG.applied_first;
@@ -459,7 +468,35 @@ export class DemoDataSource implements DataSource {
   /* ------------------------------------------------- Discovery (M5) --- */
 
   async getPipelineItems(): Promise<PipelineItem[]> {
-    return parsePipeline(DEMO_PIPELINE_MD);
+    // Session-added manual offers sit at the top of Pending (mirrors the FS
+    // writer, which inserts at the top of the `## Pending` section).
+    return [...demoManualOffers, ...parsePipeline(DEMO_PIPELINE_MD)];
+  }
+
+  /** In-memory manual-offer add (never touches the filesystem). */
+  async addManualOffer(input: AddManualOfferInput): Promise<PipelineItem> {
+    const parsed = addManualOfferInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new PipelineWriteError(
+        "INVALID_INPUT",
+        parsed.error.issues[0]?.message ?? "Invalid manual offer input.",
+      );
+    }
+    const { url } = parsed.data;
+    const num = 900 + demoManualOffers.length + 1; // demo-only synthetic jds number
+    const item = pipelineItemSchema.parse({
+      section: "pending",
+      kind: "manual",
+      url,
+      company: null,
+      role: null,
+      reportNum: null,
+      scoreRaw: null,
+      localJd: `jds/${num}-${slugFromUrl(url)}.md`,
+      raw: `- [!] ${url} | local:jds/${num}-${slugFromUrl(url)}.md | note: manual — added via dashboard (demo)`,
+    });
+    demoManualOffers.unshift(item);
+    return item;
   }
 
   async getScanHistory(): Promise<ScanRecord[]> {

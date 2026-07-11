@@ -13,6 +13,7 @@ const SCREENS: Array<{ path: string; ready: (page: Page) => Promise<void> }> = [
   { path: "/follow-ups", ready: async (p) => { await p.locator("section[aria-label='Overdue follow-ups']").waitFor(); } },
   { path: "/analytics", ready: async (p) => { await p.getByText(/Funnel/i).first().waitFor(); } },
   { path: "/discovery", ready: async (p) => { await p.getByText(/Pending/i).first().waitFor(); } },
+  { path: "/discovery/add", ready: async (p) => { await p.getByLabel("Job posting URL").waitFor(); } },
   { path: "/settings", ready: async (p) => { await p.getByText(/Demo mode/i).first().waitFor(); } },
 ];
 
