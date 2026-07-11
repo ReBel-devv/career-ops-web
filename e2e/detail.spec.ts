@@ -32,6 +32,23 @@ test("clicking an Applications row opens the same detail drawer", async ({ page 
   await expect(page).toHaveURL(/\/app\/1$/);
 });
 
+test("maximize from the drawer opens the immersive full-screen page", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: /Nimbus Labs/ }).first().click();
+  const drawer = page.getByRole("dialog");
+  await expect(drawer).toBeVisible();
+
+  // The maximize anchor forces a real navigation (escapes the intercept).
+  await drawer.getByRole("link", { name: "Open full screen" }).click();
+  await expect(page).toHaveURL(/\/app\/1$/);
+
+  // Drawer is gone; the immersive page (Back control + detail) is shown.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Back" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Nimbus Labs" })).toBeVisible();
+  await expect(page.getByText("Machine summary")).toBeVisible();
+});
+
 test("deep link renders the full detail page with all report zones", async ({ page }) => {
   await page.goto("/app/12");
   await expect(page.getByRole("heading", { name: "Halcyon Grid" })).toBeVisible();
