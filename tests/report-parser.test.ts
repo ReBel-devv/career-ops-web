@@ -13,6 +13,7 @@ import { describe, expect, it } from "vitest";
 import {
   atsVendorFromUrl,
   bucketLocation,
+  isReportFile,
   parseReport,
   reportFacet,
 } from "@/lib/parsers/report";
@@ -131,6 +132,42 @@ describe("parseReport — degraded synthetic report (F2 AC)", () => {
   });
 });
 
+describe("parseReport — Score Global heading with a revision suffix", () => {
+  // Real reports carry `## Score Global *(révisé 2026-07-11)*` when a score is
+  // revised; the table must still be found (regression for a null scoreGlobal).
+  const content = [
+    "# Évaluation : Test — Role",
+    "",
+    "**URL:** https://jobs.lever.co/test/1",
+    "**Score:** 4.0/5",
+    "",
+    "## Score Global *(révisé 2026-07-11)*",
+    "",
+    "| Dimension | Score | Commentaire |",
+    "|---|---|---|",
+    "| Match CV | 4.0/5 | ok |",
+    "| **Global** | **4.0/5** | **APPLY** |",
+    "",
+    "## A) Role Summary",
+    "",
+    "Prose.",
+    "",
+  ].join("\n");
+  const report = parseReport({ content, path: "reports/900-test.md", num: 900 });
+
+  it("finds the Score Global table despite the suffix", () => {
+    expect(report.scoreGlobal).not.toBeNull();
+    expect(report.scoreGlobal?.rows.length).toBeGreaterThan(0);
+    expect(report.scoreGlobal?.global?.score).toBe("4.0/5");
+  });
+
+  it("does not leak the Score Global section into the lettered blocks", () => {
+    const titles = report.blocks.map((b) => b.title.toLowerCase());
+    expect(titles.some((t) => t.startsWith("score global"))).toBe(false);
+    expect(report.blocks.some((b) => b.letter === "A")).toBe(true);
+  });
+});
+
 describe("atsVendorFromUrl", () => {
   it("maps known ATS hosts", () => {
     expect(atsVendorFromUrl("https://jobs.lever.co/acme/123")).toBe("Lever");
@@ -183,11 +220,11 @@ describe("archetypeFamilies", () => {
 });
 
 const realReports = existsSync(REAL)
-  ? readdirSync(REAL).filter((f) => f.endsWith(".md"))
+  ? readdirSync(REAL).filter(isReportFile)
   : [];
 
 describe.skipIf(realReports.length === 0)("parseReport — every real report", () => {
-  it("parses all reports with header URL + Machine Summary + Score Global", () => {
+  it("parses every report's required header fields, blocks and vendor", () => {
     expect(realReports.length).toBeGreaterThan(0);
     for (const file of realReports) {
       const num = Number.parseInt(file.slice(0, file.indexOf("-")), 10);
@@ -197,13 +234,15 @@ describe.skipIf(realReports.length === 0)("parseReport — every real report", (
       expect(report.title, file).not.toBe("");
       expect(report.header.url, file).toMatch(/^https?:\/\//);
       expect(report.header.score, file).toMatch(/^\d(\.\d+)?\/5/);
-      // Every real report so far carries both — if a future one doesn't,
-      // the parser must still return null rather than throw.
-      expect(report.machineSummary, file).not.toBeNull();
-      expect(report.scoreGlobal, file).not.toBeNull();
-      expect(report.scoreGlobal?.rows.length, file).toBeGreaterThan(0);
       expect(report.blocks.length, file).toBeGreaterThan(0);
       expect(report.atsVendor, file).not.toBeNull();
+      // Machine Summary + Score Global are OPTIONAL by the parser's contract
+      // (graceful degradation — see the degraded synthetic report). A real
+      // report may legitimately omit the Score Global table (the score lives
+      // in the header + Machine Summary). When present, they must be well-formed.
+      if (report.scoreGlobal) {
+        expect(report.scoreGlobal.rows.length, file).toBeGreaterThan(0);
+      }
     }
   });
 

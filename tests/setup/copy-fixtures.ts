@@ -15,6 +15,7 @@
 import { copyFile, mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { isReportFile } from "@/lib/parsers/report";
 
 const WEB_ROOT = process.cwd();
 const FIXTURES = path.join(WEB_ROOT, "tests", "fixtures");
@@ -72,7 +73,8 @@ export default async function setup(): Promise<void> {
   await mkdir(realReports, { recursive: true });
   if (existsSync(reportsDir)) {
     for (const file of await readdir(reportsDir)) {
-      if (!file.endsWith(".md")) continue;
+      // Skip reservation sentinels (NNN-RESERVED.md) — they're not reports.
+      if (!isReportFile(file)) continue;
       await copyFile(path.join(reportsDir, file), path.join(realReports, file));
     }
   }

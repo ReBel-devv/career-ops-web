@@ -31,7 +31,7 @@ import {
   type UpdateOutreachContactInput,
 } from "@/lib/domain";
 import { getConfig } from "@/lib/config";
-import { parseReport, reportFacet } from "@/lib/parsers/report";
+import { isReportFile, parseReport, reportFacet } from "@/lib/parsers/report";
 import { parseFollowUps } from "@/lib/parsers/follow-ups";
 import { parsePipeline } from "@/lib/parsers/pipeline";
 import { matchDocuments, parsePdfIndex } from "@/lib/parsers/documents";
@@ -131,7 +131,7 @@ export class FsDataSource implements DataSource {
       if (isNotFound(error)) return null;
       throw error;
     }
-    const match = files.find((f) => f.startsWith(prefix) && f.endsWith(".md"));
+    const match = files.find((f) => f.startsWith(prefix) && isReportFile(f));
     return match ?? null;
   }
 
@@ -189,7 +189,7 @@ export class FsDataSource implements DataSource {
       if (isNotFound(error)) return [];
       throw error;
     }
-    const reports = files.filter((f) => /^\d+-.*\.md$/.test(f));
+    const reports = files.filter(isReportFile);
     const facets = await Promise.all(
       reports.map(async (filename) => {
         const num = Number.parseInt(filename.slice(0, filename.indexOf("-")), 10);

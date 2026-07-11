@@ -136,7 +136,10 @@ const SEPARATOR_ROW = /^\|?[\s:|-]+\|?$/;
 function parseScoreGlobal(lines: string[]): ScoreGlobal | null {
   const headingIdx = lines.findIndex((l) => {
     const m = H2.exec(l);
-    return m ? normalizeKey(m[1]) === "score global" : false;
+    // `startsWith` (not exact) so a revision suffix is tolerated, e.g.
+    // `## Score Global *(révisé 2026-07-11)*` — mirrors the Machine Summary
+    // heading match. Otherwise the whole table is missed and scoreGlobal is null.
+    return m ? normalizeKey(m[1]).startsWith("score global") : false;
   });
   if (headingIdx === -1) return null;
 
@@ -188,7 +191,7 @@ function parseBlocks(lines: string[]): ReportBlock[] {
     const end = h + 1 < headingIdxs.length ? headingIdxs[h + 1] : lines.length;
     const title = (H2.exec(lines[start])?.[1] ?? "").trim();
     const norm = normalizeKey(title);
-    if (norm.startsWith("machine summary") || norm === "score global") continue;
+    if (norm.startsWith("machine summary") || norm.startsWith("score global")) continue;
     const markdown = lines.slice(start, end).join("\n").replace(/\s+$/, "");
     blocks.push({ letter: detectLetter(title), title, markdown });
   }
@@ -284,4 +287,17 @@ export function reportFacet(report: Report): ReportFacet {
     atsVendor: report.atsVendor,
     locationBucket: report.locationBucket,
   };
+}
+
+/**
+ * Whether a `reports/` filename is a real evaluation report (`NNN-{slug}-{date}.md`)
+ * and NOT a reservation sentinel. `reserve-report-num.mjs` writes zero-byte
+ * `NNN-RESERVED.md` markers during parallel fan-outs (reserve → write real file →
+ * release); they share the numeric prefix but carry no report content, so parsing
+ * one yields an empty report (no URL / Machine Summary / facet). Excluded
+ * everywhere reports are enumerated so a transient sentinel never surfaces as a
+ * bogus report or breaks the "every real report" invariants.
+ */
+export function isReportFile(name: string): boolean {
+  return /^\d+-.*\.md$/.test(name) && !/-RESERVED\.md$/i.test(name);
 }

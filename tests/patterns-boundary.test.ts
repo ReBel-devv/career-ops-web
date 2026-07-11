@@ -50,8 +50,11 @@ describe.skipIf(!repo)("Discovery readers — real repo (read-only)", () => {
     // The parser must never lose a recognized line's content.
     for (const item of items) {
       expect(item.raw.trim().startsWith("-")).toBe(true);
-      if (item.kind === "done") {
-        expect(item.reportNum).not.toBeNull();
+      // A processed `[x]` line may legitimately carry no report number — the
+      // real inbox marks pre-screened-out URLs `- [x] #-- | url | skipped …`.
+      // So reportNum is either absent or a positive integer, never bogus.
+      if (item.reportNum !== null) {
+        expect(item.reportNum).toBeGreaterThan(0);
       }
     }
     // Sections must be internally consistent.
