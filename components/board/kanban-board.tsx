@@ -1,24 +1,34 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
   PointerSensor,
-  closestCorners,
   defaultDropAnimationSideEffects,
+  getFirstCollision,
   pointerWithin,
-  useDraggable,
+  rectIntersection,
   useDroppable,
   useSensor,
   useSensors,
   type Announcements,
   type CollisionDetection,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
   type DropAnimation,
+  type UniqueIdentifier,
 } from "@dnd-kit/core";
+import {
+  SortableContext,
+  defaultAnimateLayoutChanges,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+  type AnimateLayoutChanges,
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
 import { ApplicationCard } from "@/components/board/application-card";
@@ -31,46 +41,108 @@ import type { BoardColumn } from "@/lib/grouping";
 import { cn } from "@/lib/utils";
 
 /**
- * Drop animation. dnd-kit's default flies the overlay back to the dragged
- * card's ORIGINAL slot ("return to source") — but our move is optimistic, so
- * the real card is already in the target column and the returning overlay read
- * as a duplicate snapping backwards. Instead we **dissolve the overlay in
- * place** (fade + a hair of shrink) right where it was dropped; the settled
- * card (see `card-drop-in`) carries the "landed" feel. `sideEffects` hides the
- * source node during the fade so there is never a second visible card.
+ * Reflow physics for the cards that shift to make room. An ease-out quart curve
+ * (fast start, long soft settle) reads as weight + inertia without any bounce —
+ * sober and premium, not springy. Shared by the sortable transition and, via
+ * the same curve, the drop dissolve.
+ */
+const SORT_TRANSITION = { duration: 260, easing: "cubic-bezier(0.25, 1, 0.5, 1)" };
+
+/**
+ * Drop animation = the overlay **travels** from the cursor to the ghost slot.
+ *
+ * The dragged card's real DOM node lives, throughout the drag, at the exact
+ * slot the auto-sort will drop it into (see `placeActive` — the gap is opened
+ * by rank, not by pointer). So dnd-kit's default keyframes (overlay glides from
+ * its release transform to that node's rect) read as *the same element
+ * continuing its motion* to its final home — no teleport, no return-to-source.
+ * `sideEffects` keeps the underlying node hidden until the glide lands, so the
+ * card is never visible twice and there is no flash on hand-off.
  */
 const dropAnimation: DropAnimation = {
-  duration: 170,
-  easing: "cubic-bezier(0.2, 0, 0, 1)",
-  keyframes: ({ transform }) => [
-    { opacity: 1, transform: CSS.Transform.toString(transform.initial) },
-    {
-      opacity: 0,
-      transform: CSS.Transform.toString({
-        ...transform.initial,
-        scaleX: transform.initial.scaleX * 0.96,
-        scaleY: transform.initial.scaleY * 0.96,
-      }),
-    },
-  ],
+  duration: 300,
+  easing: "cubic-bezier(0.2, 0.85, 0.25, 1)",
   sideEffects: defaultDropAnimationSideEffects({
     styles: { active: { opacity: "0" } },
   }),
 };
 
+// Keep laid-out cards animating into place after a cross-column move, too.
+const animateLayoutChanges: AnimateLayoutChanges = (args) =>
+  defaultAnimateLayoutChanges({ ...args, wasDragging: true });
+
+type Items = Record<string, number[]>;
+
+/** Column id → ordered app nums, straight from the grouped columns. */
+function deriveItems(columns: BoardColumn[]): Items {
+  const items: Items = {};
+  for (const c of columns) items[c.state.id] = c.applications.map((a) => a.num);
+  return items;
+}
+
+/** A stable signature of the grouped columns (membership + placement + order). */
+function columnsSignature(columns: BoardColumn[]): string {
+  return columns.map((c) => `${c.state.id}:${c.applications.map((a) => a.num).join(",")}`).join("|");
+}
+
+/** A stable signature of a local Items map (for cheap "did placement change?"). */
+function itemsSignature(items: Items): string {
+  return Object.keys(items)
+    .sort()
+    .map((k) => `${k}:${items[k].join(",")}`)
+    .join("|");
+}
+
+/** Insertion index for `activeNum` among `residents`, by ascending auto-sort rank. */
+function insertIndexByRank(
+  residents: number[],
+  activeNum: number,
+  rankByNum: Map<number, number>,
+): number {
+  const activeRank = rankByNum.get(activeNum) ?? Number.POSITIVE_INFINITY;
+  let i = 0;
+  while (i < residents.length && (rankByNum.get(residents[i]) ?? Infinity) < activeRank) i++;
+  return i;
+}
+
 /**
- * Desktop Kanban board (F1): horizontal columns, drag between them, keyboard
- * drag (dnd-kit KeyboardSensor + announcements), and a "Move to status" menu on
- * every card as the accessible mirror. A drag over a different column triggers
- * `onMove` → optimistic PATCH (handled by the caller's mutation).
+ * Deterministically place the dragged card into `targetContainer` at the slot
+ * the auto-sort would land it — computed from the pre-drag canonical snapshot,
+ * NOT the pointer position. This is the whole idea: the gap opens where the card
+ * will actually end up, so the ghost preview never lies about the destination.
+ */
+function placeActive(
+  base: Items,
+  activeNum: number,
+  targetContainer: string,
+  rankByNum: Map<number, number>,
+): Items {
+  const result: Items = {};
+  for (const [cid, nums] of Object.entries(base)) {
+    result[cid] = nums.filter((n) => n !== activeNum);
+  }
+  const residents = result[targetContainer] ?? [];
+  const idx = insertIndexByRank(residents, activeNum, rankByNum);
+  result[targetContainer] = [...residents.slice(0, idx), activeNum, ...residents.slice(idx)];
+  return result;
+}
+
+/**
+ * Desktop Kanban board (F1). Columns are sortable containers, but intra-column
+ * order is **automatic** (by `rankByNum`), not hand-sorted. So dragging a card
+ * over another column opens the make-room gap at the card's *computed* landing
+ * slot (see `placeActive`) rather than under the pointer — the ghost preview
+ * always shows the true destination, and on drop the overlay simply glides into
+ * that already-open slot. Status is persisted on drop via `onMove`. Keyboard
+ * drag (KeyboardSensor + announcements) and a per-card "Move to status" menu are
+ * the accessible mirrors.
  *
- * Mobile (< md) does NOT use this — MobileBoard replaces horizontal drag with a
- * segmented status control + action sheet (plan §2). This board is rendered
- * inside a `hidden md:flex` wrapper by the parent.
+ * Mobile (< md) uses MobileBoard instead (rendered by the parent).
  */
 export function KanbanBoard({
   columns,
   states,
+  rankByNum,
   onMove,
   disabled = false,
   overdueNums,
@@ -78,6 +150,8 @@ export function KanbanBoard({
 }: {
   columns: BoardColumn[];
   states: CanonicalState[];
+  /** Auto-sort key: app num → its rank in the global order (from board.tsx). */
+  rankByNum: Map<number, number>;
   onMove: (app: Application, statusId: string) => void;
   disabled?: boolean;
   overdueNums?: Set<number>;
@@ -85,34 +159,77 @@ export function KanbanBoard({
 }) {
   const reducedMotion = usePrefersReducedMotion();
   const [activeApp, setActiveApp] = useState<Application | null>(null);
-  // The card that just landed via drag — drives its one-shot "settle" animation
-  // in the destination column, cleared shortly after.
-  const [justMovedNum, setJustMovedNum] = useState<number | null>(null);
+  const [items, setItems] = useState<Items>(() => deriveItems(columns));
 
-  // Columns are the droppables (no intra-column sorting). `closestCorners`
-  // alone is unreliable once a column is tall enough to overflow: its far
-  // (bottom) corners inflate the corner distance, so an adjacent SHORTER column
-  // wins the collision and dropping onto the long column fails. `pointerWithin`
-  // answers the real question ("which column is the pointer over?") accurately
-  // regardless of column height; we fall back to `closestCorners` only when
-  // there is no pointer (keyboard drag). This is the dnd-kit multi-container
-  // recommendation. See docs/DASHBOARD-FIXES.md #1.
-  const collisionDetection: CollisionDetection = (args) => {
-    const pointerCollisions = pointerWithin(args);
-    return pointerCollisions.length > 0 ? pointerCollisions : closestCorners(args);
-  };
+  // Pre-drag snapshot: the canonical membership. It is both the cancel target
+  // and the base every `placeActive` recomputes from.
+  const clonedItems = useRef<Items | null>(null);
+  const lastOverId = useRef<UniqueIdentifier | null>(null);
 
-  const sensors = useSensors(
-    // distance guard so clicking a card link doesn't start a drag
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor),
-  );
+  // Mirror external column changes into local state while idle (adjust-state-
+  // during-render pattern). While dragging, the local `items` is authoritative
+  // so make-room edits are never clobbered by a stale props signature.
+  const [adoptedSig, setAdoptedSig] = useState<string>(() => columnsSignature(columns));
+  if (activeApp === null) {
+    const sig = columnsSignature(columns);
+    if (sig !== adoptedSig) {
+      setAdoptedSig(sig);
+      setItems(deriveItems(columns));
+    }
+  }
 
   const byNum = useMemo(() => {
     const m = new Map<number, Application>();
     for (const c of columns) for (const a of c.applications) m.set(a.num, a);
     return m;
   }, [columns]);
+
+  const containers = useMemo(() => columns.map((c) => c.state.id), [columns]);
+
+  const findContainer = useCallback(
+    (id: UniqueIdentifier | number): string | undefined => {
+      if (typeof id === "string" && id in items) return id;
+      const num = Number(id);
+      return containers.find((c) => items[c]?.includes(num));
+    },
+    [items, containers],
+  );
+
+  /**
+   * Collision resolves to the COLUMN under the pointer (never a card): the
+   * within-column slot is decided by rank, not by which card we hover, so the
+   * only thing collision must answer is "which column?". Pointer-first keeps it
+   * accurate no matter the column height (the long-column fix, #1); rect
+   * fallback covers the keyboard sensor. `lastOverId` holds a valid column
+   * across the frame where the card crosses a boundary.
+   */
+  const collisionDetection: CollisionDetection = useCallback(
+    (args) => {
+      const pointerCollisions = pointerWithin(args);
+      const intersections =
+        pointerCollisions.length > 0 ? pointerCollisions : rectIntersection(args);
+      let overId = getFirstCollision(intersections, "id");
+
+      if (overId != null) {
+        // Map a card hit up to its column; a column hit passes through.
+        if (typeof overId !== "string" || !(overId in items)) {
+          const container = findContainer(overId);
+          if (container) overId = container;
+        }
+        lastOverId.current = overId;
+        return [{ id: overId }];
+      }
+
+      return lastOverId.current != null ? [{ id: lastOverId.current }] : [];
+    },
+    [items, findContainer],
+  );
+
+  const sensors = useSensors(
+    // distance guard so clicking a card link doesn't start a drag
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const labelOf = (statusId: string) =>
     states.find((s) => s.id === statusId)?.label ?? statusId;
@@ -124,35 +241,73 @@ export function KanbanBoard({
         ? `Picked up ${app.company} card, currently in ${labelOf(app.statusId ?? "")}.`
         : "Picked up card.";
     },
-    onDragOver: ({ over }) =>
-      over ? `Over ${labelOf(String(over.id))} column.` : "Not over a column.",
+    onDragOver: ({ over }) => {
+      const container = over ? findContainer(over.id) : undefined;
+      return container ? `Over ${labelOf(container)} column.` : "Not over a column.";
+    },
     onDragEnd: ({ active, over }) => {
       const app = byNum.get(Number(active.id));
-      if (over && app) return `Moved ${app.company} to ${labelOf(String(over.id))}.`;
+      const container = over ? findContainer(over.id) : undefined;
+      if (app && container) return `Moved ${app.company} to ${labelOf(container)}.`;
       return "Move cancelled.";
     },
     onDragCancel: () => "Move cancelled.",
   };
 
   function handleDragStart(event: DragStartEvent) {
+    clonedItems.current = items;
     setActiveApp(byNum.get(Number(event.active.id)) ?? null);
   }
 
-  function handleDragEnd(event: DragEndEvent) {
-    setActiveApp(null);
+  function handleDragOver(event: DragOverEvent) {
     const { active, over } = event;
     if (!over) return;
-    const app = byNum.get(Number(active.id));
-    const targetStatusId = String(over.id);
-    if (app && app.statusId !== targetStatusId) {
-      onMove(app, targetStatusId);
-      // Play the destination "settle" on the card that just moved.
-      setJustMovedNum(app.num);
-      window.setTimeout(
-        () => setJustMovedNum((n) => (n === app.num ? null : n)),
-        320,
-      );
+    const overContainer = findContainer(over.id); // collision → column id
+    const base = clonedItems.current;
+    if (!overContainer || !base) return;
+
+    const activeNum = Number(active.id);
+    // Re-derive the whole placement from the canonical pre-drag snapshot every
+    // time: the card sits in `overContainer` at its rank slot. Because the slot
+    // depends only on the column (not the pointer Y), the gap is rock-steady —
+    // no thrashing as the pointer moves within a column. Skip the state write
+    // when nothing actually changed.
+    const next = placeActive(base, activeNum, overContainer, rankByNum);
+    setItems((prev) => (itemsSignature(prev) === itemsSignature(next) ? prev : next));
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const app = activeApp;
+    const cloned = clonedItems.current;
+    clonedItems.current = null;
+    setActiveApp(null);
+
+    const { active, over } = event;
+    if (!app || !over) {
+      if (cloned) setItems(cloned);
+      return;
     }
+    // After onDragOver the card already sits in its destination container.
+    const finalContainer = findContainer(active.id) ?? findContainer(over.id);
+    if (!finalContainer) {
+      if (cloned) setItems(cloned);
+      return;
+    }
+    if (app.statusId !== finalContainer) {
+      // Persist the status. Local `items` already reflects it; the optimistic
+      // update will re-derive the same placement, so no revert flicker.
+      onMove(app, finalContainer);
+    } else {
+      // Same column, no status change — snap back to the canonical order (we
+      // don't persist intra-column order).
+      setItems(deriveItems(columns));
+    }
+  }
+
+  function handleDragCancel() {
+    if (clonedItems.current) setItems(clonedItems.current);
+    clonedItems.current = null;
+    setActiveApp(null);
   }
 
   return (
@@ -161,34 +316,42 @@ export function KanbanBoard({
       collisionDetection={collisionDetection}
       accessibility={{ announcements }}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
-      onDragCancel={() => setActiveApp(null)}
+      onDragCancel={handleDragCancel}
     >
       <div className="flex h-full gap-3 overflow-x-auto pb-2">
-        {columns.map((column) => (
-          <Column
-            key={column.state.id}
-            column={column}
-            states={states}
-            onMove={onMove}
-            disabled={disabled}
-            overdueNums={overdueNums}
-            outreachByNum={outreachByNum}
-            justMovedNum={justMovedNum}
-          />
-        ))}
+        {columns.map((column) => {
+          const ids = items[column.state.id] ?? [];
+          const apps = ids
+            .map((n) => byNum.get(n))
+            .filter((a): a is Application => a != null);
+          return (
+            <Column
+              key={column.state.id}
+              column={column}
+              apps={apps}
+              states={states}
+              onMove={onMove}
+              disabled={disabled}
+              overdueNums={overdueNums}
+              outreachByNum={outreachByNum}
+            />
+          );
+        })}
       </div>
 
       <DragOverlay dropAnimation={reducedMotion ? null : dropAnimation}>
         {activeApp ? (
           <ApplicationCard
             app={activeApp}
-            className={cn(
-              "w-64 cursor-grabbing shadow-2xl ring-1 ring-foreground/10",
-              // Picked-up feel: a light lift + a hair of tilt — enough to feel
-              // physical, not theatrical. Skipped under reduced motion.
-              !reducedMotion && "rotate-[1.5deg] scale-[1.03]",
-            )}
+            // Elevation ONLY — shadow + ring, no rotate/scale. The overlay must
+            // share the resting card's exact geometry so the drop travel lands
+            // on it with zero discontinuity. Any transform here (tilt/scale)
+            // stays constant through the glide and then snaps away at hand-off —
+            // that snap is the flick we're avoiding. Lift is carried by the
+            // shadow, which reads as "picked up" without changing geometry.
+            className="w-64 cursor-grabbing shadow-2xl ring-1 ring-foreground/10"
           />
         ) : null}
       </DragOverlay>
@@ -198,34 +361,34 @@ export function KanbanBoard({
 
 function Column({
   column,
+  apps,
   states,
   onMove,
   disabled,
   overdueNums,
   outreachByNum,
-  justMovedNum,
 }: {
   column: BoardColumn;
+  apps: Application[];
   states: CanonicalState[];
   onMove: (app: Application, statusId: string) => void;
   disabled: boolean;
   overdueNums?: Set<number>;
   outreachByNum?: Map<number, OutreachCardHint>;
-  justMovedNum?: number | null;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: column.state.id });
   const dot = STATUS_DOT_CLASS[column.state.dashboardGroup] ?? "bg-muted-foreground/40";
 
   return (
     <section
-      aria-label={`${column.state.label} column, ${column.applications.length} applications`}
+      aria-label={`${column.state.label} column, ${apps.length} applications`}
       className="flex w-64 shrink-0 flex-col"
     >
       <header className="mb-2 flex items-center gap-1.5 px-1">
         <span aria-hidden className={cn("size-2 rounded-full", dot)} />
         <h2 className="text-data font-medium">{column.state.label}</h2>
         <span className="font-mono text-xs tabular-nums text-muted-foreground">
-          {column.applications.length}
+          {apps.length}
         </span>
       </header>
       <div
@@ -239,19 +402,23 @@ function Column({
           isOver && "border-primary/40 bg-accent/40",
         )}
       >
-        {column.applications.map((app) => (
-          <DraggableCard
-            key={app.num}
-            app={app}
-            states={states}
-            onMove={onMove}
-            disabled={disabled}
-            overdue={overdueNums?.has(app.num) ?? false}
-            outreach={outreachByNum?.get(app.num)}
-            justDropped={justMovedNum === app.num}
-          />
-        ))}
-        {column.applications.length === 0 ? (
+        <SortableContext
+          items={apps.map((a) => a.num)}
+          strategy={verticalListSortingStrategy}
+        >
+          {apps.map((app) => (
+            <SortableCard
+              key={app.num}
+              app={app}
+              states={states}
+              onMove={onMove}
+              disabled={disabled}
+              overdue={overdueNums?.has(app.num) ?? false}
+              outreach={outreachByNum?.get(app.num)}
+            />
+          ))}
+        </SortableContext>
+        {apps.length === 0 ? (
           <p className="px-1 py-6 text-center text-xs text-muted-foreground/60">
             Drop here
           </p>
@@ -261,14 +428,13 @@ function Column({
   );
 }
 
-function DraggableCard({
+function SortableCard({
   app,
   states,
   onMove,
   disabled,
   overdue,
   outreach,
-  justDropped = false,
 }: {
   app: Application;
   states: CanonicalState[];
@@ -276,24 +442,25 @@ function DraggableCard({
   disabled: boolean;
   overdue: boolean;
   outreach?: OutreachCardHint;
-  justDropped?: boolean;
 }) {
   const {
     attributes,
     listeners,
     setNodeRef,
     setActivatorNodeRef,
+    transform,
+    transition,
     isDragging,
-  } = useDraggable({ id: app.num, disabled });
+  } = useSortable({ id: app.num, disabled, animateLayoutChanges, transition: SORT_TRANSITION });
 
   // A11y split (axe `nested-interactive`): the card div keeps the POINTER
   // listeners (drag from anywhere with the mouse) but carries no interactive
-  // role — its link and buttons stay properly reachable. The keyboard/ARIA
-  // drag surface is a dedicated handle button (dnd-kit activator) carrying
-  // `attributes` (role, tabindex, aria-roledescription) + listeners.
-  //
-  // With a DragOverlay, the source stays put as a dimmed ghost (no transform)
-  // and the overlay carries the motion — cleaner than translating both.
+  // role — its link and buttons stay reachable. The keyboard/ARIA drag surface
+  // is a dedicated handle button (dnd-kit activator) carrying `attributes` +
+  // listeners. `transform`/`transition` are what make neighbours slide to open
+  // a gap; the actively dragged card becomes the **future-position preview** — a
+  // dashed, faintly tinted placeholder sitting in the exact slot the card will
+  // land in — while the DragOverlay carries the motion under the cursor.
   return (
     <ApplicationCard
       ref={setNodeRef}
@@ -301,11 +468,11 @@ function DraggableCard({
       overdue={overdue}
       outreach={outreach}
       dragging={isDragging}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
         !disabled && "cursor-grab active:cursor-grabbing",
-        isDragging && "opacity-40 ring-1 ring-border",
-        // One-shot "settle" as the card lands in its new column.
-        justDropped && "motion-safe:animate-card-drop-in",
+        isDragging &&
+          "border-dashed border-primary/40 bg-primary/[0.04] opacity-80 shadow-none",
       )}
       action={
         <>
@@ -314,7 +481,9 @@ function DraggableCard({
               type="button"
               ref={setActivatorNodeRef}
               aria-label={`Drag #${app.num} ${app.company}`}
-              className="inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-ring active:cursor-grabbing"
+              // touch-none: a touch-drag from the grip must not scroll the
+              // column — the PointerSensor owns the gesture from here.
+              className="inline-flex size-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:outline-2 focus-visible:outline-ring active:cursor-grabbing"
               {...attributes}
               {...listeners}
             >

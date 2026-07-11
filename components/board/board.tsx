@@ -57,9 +57,17 @@ export function Board() {
     const facetIndex = buildFacetIndex(facetsQuery.data ?? []);
     const filtered = filterApplications(appsQuery.data, filters, facetIndex);
     const grouped = groupApplications(filtered, statesQuery.data);
+    // Auto-sort key: a row's index in the (order-preserving) filtered global
+    // array. The optimistic move only flips a row's statusId in place, so when a
+    // card lands in a new column it sits among that column's members in this same
+    // global order. The board uses this rank to open the make-room gap exactly
+    // where the card will actually land — not under the pointer.
+    const rankByNum = new Map<number, number>();
+    filtered.forEach((app, i) => rankByNum.set(app.num, i));
     return {
       columns: visibleColumns(grouped, filters.archived),
       states: statesQuery.data,
+      rankByNum,
     };
   }, [appsQuery.data, statesQuery.data, facetsQuery.data, filters]);
 
@@ -98,6 +106,7 @@ export function Board() {
         <KanbanBoard
           columns={board.columns}
           states={board.states}
+          rankByNum={board.rankByNum}
           onMove={onMove}
           disabled={!mutationsEnabled}
           overdueNums={overdueNums}

@@ -100,14 +100,19 @@ test("mouse drag drops into the most-populated column (long-column collision)", 
   await page.mouse.move(from.x + from.width / 2, from.y + from.height - 8);
   await page.mouse.down();
   await page.mouse.move(from.x + from.width / 2 - 10, from.y + from.height - 4, { steps: 3 });
-  const live = page.locator("[aria-live='assertive']").first();
+  // Read announcements via evaluateAll (no actionability wait — the live region
+  // stays "unstable" for textContent while the long column auto-scrolls).
+  const liveText = async () =>
+    (await page.locator("[aria-live]").evaluateAll((els) =>
+      els.map((e) => e.textContent?.trim() ?? "").join(" "),
+    )) ?? "";
   let over = false;
-  // Sweep across the Evaluated column body (including lower cards) until dnd-kit
-  // announces it as the drop target.
-  for (let y = to.y + 40; y <= to.y + to.height - 20 && !over; y += 60) {
-    await page.mouse.move(to.x + to.width / 2, y, { steps: 4 });
-    await page.waitForTimeout(80);
-    over = ((await live.textContent()) ?? "").includes("Over Evaluated column");
+  // Sweep into the populated Evaluated column until dnd-kit announces it as the
+  // drop target (pointerWithin must pick it over the neighbouring short column).
+  for (let x = from.x - 20; x >= to.x + to.width / 2 && !over; x -= 40) {
+    await page.mouse.move(x, to.y + 200, { steps: 4 });
+    await page.waitForTimeout(90);
+    over = (await liveText()).includes("Over Evaluated column");
   }
   expect(over).toBe(true);
   await page.mouse.up();
