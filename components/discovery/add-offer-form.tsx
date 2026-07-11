@@ -70,7 +70,7 @@ export function AddOfferForm() {
 
   if (added) {
     return (
-      <div className="flex max-w-2xl flex-col gap-4">
+      <div className="flex flex-col gap-4">
         <div className="flex items-start gap-3 rounded-lg border border-score-high/30 bg-score-high/5 p-4">
           <CheckCircle2 className="mt-0.5 size-5 shrink-0 text-score-high" aria-hidden />
           <div className="min-w-0 text-sm">
@@ -97,7 +97,7 @@ export function AddOfferForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex max-w-2xl flex-col gap-5">
+    <form onSubmit={onSubmit} className="flex flex-col gap-5">
       {!enabled ? (
         <div
           role="note"
@@ -146,7 +146,7 @@ export function AddOfferForm() {
         </p>
         <Textarea
           id="offer-jd"
-          rows={14}
+          rows={11}
           placeholder="Paste the job description here…"
           value={jd}
           onChange={(e) => setJd(e.target.value)}
