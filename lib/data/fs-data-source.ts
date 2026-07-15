@@ -6,6 +6,7 @@ import {
   parsePdfCell,
   parseReportCell,
   parseScoreCell,
+  profileDocumentKind,
   scanRecordSchema,
   type AddManualOfferInput,
   type AddOutreachContactInput,
@@ -22,6 +23,11 @@ import {
   type OutreachRecord,
   type PatternsResult,
   type PipelineItem,
+  type Profile,
+  type ProfileData,
+  type ProfileDocument,
+  type ProfileTexts,
+  type ProfileWritingSample,
   type Report,
   type ReportFacet,
   type RescheduleFollowUpInput,
@@ -29,6 +35,7 @@ import {
   type UpdateApplicationInput,
   type UpdateApplicationResult,
   type UpdateOutreachContactInput,
+  type UpdateProfileFieldInput,
 } from "@/lib/domain";
 import { getConfig } from "@/lib/config";
 import { isReportFile, parseReport, reportFacet } from "@/lib/parsers/report";
@@ -46,16 +53,20 @@ import {
 import {
   addManualOffer,
   addOutreachContact,
+  addProfileDocument,
   appendFollowUpLog,
   deleteOutreachContact,
   FollowUpWriteError,
   OutreachWriteError,
   parseOutreachDoc,
   PipelineWriteError,
+  ProfileWriteError,
+  setProfileField,
   TrackerWriteError,
   updateOutreachContact,
   writeTrackerCell,
 } from "@/lib/writers";
+import { parseProfile } from "@/lib/parsers/profile";
 import type { DataSource } from "./data-source";
 import { readStatesFile } from "./states-file";
 import { loadTrackerParse, type TrackerRow } from "./tracker-module";
@@ -416,6 +427,148 @@ export class FsDataSource implements DataSource {
   /** analyze-patterns.mjs --json, zod-validated (never recomputed). */
   async getPatterns(): Promise<PatternsResult> {
     return runAnalyzePatterns(this.repoPath);
+  }
+
+  /* ---------------------------------------------------- Profile --- */
+
+  /** List real documents in `sources/` (skips README + hidden/temp files). */
+  private async listProfileDocuments(): Promise<ProfileDocument[]> {
+    const dir = this.resolve("sources");
+    let names: string[];
+    try {
+      names = await fs.readdir(dir);
+    } catch (error: unknown) {
+      if (isNotFound(error)) return [];
+      throw error;
+    }
+    const docs: ProfileDocument[] = [];
+    for (const name of names) {
+      if (name.startsWith(".")) continue; // hidden + our temp files
+      if (name.toLowerCase() === "readme.md") continue; // instructions, not a doc
+      let stat;
+      try {
+        stat = await fs.stat(path.join(dir, name));
+      } catch {
+        continue;
+      }
+      if (!stat.isFile()) continue;
+      const dot = name.lastIndexOf(".");
+      const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+      docs.push({
+        name,
+        ext,
+        kind: profileDocumentKind(ext),
+        sizeBytes: stat.size,
+        modifiedMs: stat.mtimeMs,
+      });
+    }
+    // Newest first — most-recently-added documents surface at the top.
+    return docs.sort((a, b) => b.modifiedMs - a.modifiedMs);
+  }
+
+  /** Read a repo-root markdown file, or null when absent. */
+  private async readRootText(name: string): Promise<string | null> {
+    try {
+      return await fs.readFile(this.resolve(name), "utf8");
+    } catch (error: unknown) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
+  }
+
+  /** The long-form texts that feed the profile (cv, digest, voice, samples). */
+  private async readProfileTexts(): Promise<ProfileTexts> {
+    const [cv, articleDigest, voiceDna, sampleNames] = await Promise.all([
+      this.readRootText("cv.md"),
+      this.readRootText("article-digest.md"),
+      this.readRootText("voice-dna.md"),
+      fs.readdir(this.resolve("writing-samples")).catch((e: unknown) => {
+        if (isNotFound(e)) return [] as string[];
+        throw e;
+      }),
+    ]);
+    const writingSamples: ProfileWritingSample[] = [];
+    for (const name of sampleNames.sort()) {
+      if (name.startsWith(".") || name.toLowerCase() === "readme.md") continue;
+      if (!/\.(md|markdown|txt)$/i.test(name)) continue;
+      try {
+        const markdown = await fs.readFile(
+          this.resolve("writing-samples", name),
+          "utf8",
+        );
+        writingSamples.push({ name, markdown });
+      } catch (error: unknown) {
+        if (!isNotFound(error)) throw error;
+      }
+    }
+    return { cv, articleDigest, voiceDna, writingSamples };
+  }
+
+  async getProfile(): Promise<ProfileData> {
+    const [content, documents, texts] = await Promise.all([
+      this.readRootProfileYaml(),
+      this.listProfileDocuments(),
+      this.readProfileTexts(),
+    ]);
+    return { profile: parseProfile(content), documents, texts };
+  }
+
+  /** Read config/profile.yml, or an empty document when it's absent. */
+  private async readRootProfileYaml(): Promise<string> {
+    try {
+      return await fs.readFile(this.resolve("config", "profile.yml"), "utf8");
+    } catch (error: unknown) {
+      if (isNotFound(error)) return "";
+      throw error;
+    }
+  }
+
+  async updateProfileField(input: UpdateProfileFieldInput): Promise<Profile> {
+    if (getConfig().readOnly) {
+      throw new ProfileWriteError(
+        "READ_ONLY",
+        "READ_ONLY is set — all mutations are disabled.",
+      );
+    }
+    return setProfileField(this.repoPath, input);
+  }
+
+  async addProfileDocument(
+    filename: string,
+    bytes: Uint8Array,
+  ): Promise<ProfileDocument> {
+    if (getConfig().readOnly) {
+      throw new ProfileWriteError(
+        "READ_ONLY",
+        "READ_ONLY is set — all mutations are disabled.",
+      );
+    }
+    return addProfileDocument(this.repoPath, filename, bytes);
+  }
+
+  async readProfileDocument(
+    name: string,
+  ): Promise<{ bytes: Uint8Array; ext: string } | null> {
+    const dir = this.resolve("sources");
+    const target = path.join(dir, name);
+    // Never escape sources/: the resolved parent must equal sources/.
+    if (
+      name.includes("/") ||
+      name.includes("\\") ||
+      name.includes("..") ||
+      path.dirname(path.resolve(target)) !== path.resolve(dir)
+    ) {
+      return null;
+    }
+    try {
+      const bytes = await fs.readFile(target);
+      const dot = name.lastIndexOf(".");
+      const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+      return { bytes: new Uint8Array(bytes), ext };
+    } catch (error: unknown) {
+      if (isNotFound(error)) return null;
+      throw error;
+    }
   }
 
   /**

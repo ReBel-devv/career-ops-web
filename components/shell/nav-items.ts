@@ -13,7 +13,11 @@ export interface NavItem {
   icon: LucideIcon;
 }
 
-/** Primary navigation — desktop rail order = mobile tab order (5 tabs). */
+/**
+ * Primary navigation — desktop rail order = mobile tab order (5 tabs). Profile
+ * lives behind the avatar menu (top-right), alongside Settings, to keep the
+ * mobile tab bar from overflowing.
+ */
 export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Board", icon: LayoutGrid },
   { href: "/applications", label: "Applications", icon: Table2 },

@@ -6,6 +6,7 @@ export * from "./interview-prep";
 export * from "./outreach";
 export * from "./parse";
 export * from "./patterns";
+export * from "./profile";
 export * from "./pipeline";
 export * from "./report";
 export * from "./scan";

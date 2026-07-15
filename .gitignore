@@ -52,3 +52,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# vendored local design skill (not shared with the repo)
+/.claude/skills/ui-ux-pro-max/

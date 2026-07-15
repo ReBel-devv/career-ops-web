@@ -65,3 +65,18 @@ export {
   slugFromUrl,
   type PipelineWriteErrorCode,
 } from "./pipeline-writer";
+export {
+  acquireProfileLock,
+  profileLockDirFor,
+  profilePathFor,
+  ProfileLockTimeoutError,
+  type ProfileLockHandle,
+  type ProfileLockOptions,
+} from "./profile-lock";
+export {
+  addProfileDocument,
+  setProfileField,
+  setYamlScalar,
+  ProfileWriteError,
+  type ProfileWriteErrorCode,
+} from "./profile-writer";

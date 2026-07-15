@@ -22,8 +22,15 @@ import {
   type OutreachDoc,
   type OutreachMutationResult,
   type OutreachRecord,
+  profileDocumentKind,
+  PROFILE_UPLOAD_EXTS,
+  PROFILE_UPLOAD_MAX_BYTES,
+  updateProfileFieldInputSchema,
   type PatternsResult,
   type PipelineItem,
+  type Profile,
+  type ProfileData,
+  type ProfileDocument,
   type Report,
   type ReportFacet,
   type RescheduleFollowUpInput,
@@ -31,6 +38,7 @@ import {
   type UpdateApplicationInput,
   type UpdateApplicationResult,
   type UpdateOutreachContactInput,
+  type UpdateProfileFieldInput,
 } from "@/lib/domain";
 import {
   applyAddContact,
@@ -39,11 +47,14 @@ import {
   FollowUpWriteError,
   OutreachWriteError,
   PipelineWriteError,
+  ProfileWriteError,
   resolveWritableStatus,
   sanitizeNotes,
+  setYamlScalar,
   slugFromUrl,
   TrackerWriteError,
 } from "@/lib/writers";
+import { parseProfile } from "@/lib/parsers/profile";
 import { parsePipeline } from "@/lib/parsers/pipeline";
 import { parseReport, reportFacet } from "@/lib/parsers/report";
 import { DEMO_APPS } from "@/fixtures/apps";
@@ -53,6 +64,11 @@ import { buildDemoOutreach } from "@/fixtures/outreach";
 import { DEMO_PIPELINE_MD, DEMO_SCAN_HISTORY } from "@/fixtures/discovery";
 import { DEMO_DOCUMENTS } from "@/fixtures/pdfs";
 import { buildDemoPatterns } from "@/fixtures/patterns";
+import {
+  DEMO_PROFILE_DOCUMENTS,
+  DEMO_PROFILE_TEXTS,
+  DEMO_PROFILE_YAML,
+} from "@/fixtures/profile";
 import type { DataSource } from "./data-source";
 
 /**
@@ -101,6 +117,13 @@ let demoOutreach: OutreachDoc = buildDemoOutreach();
 /** Manually-added `[!]` offers (session-only). Prepended to the parsed fixture
  * pipeline so the Discovery inbox reflects the add without touching any file. */
 const demoManualOffers: PipelineItem[] = [];
+
+/** In-memory profile YAML, edited through the SAME `setYamlScalar` the FS
+ * writer uses (Decision 6 — session-only, no filesystem). */
+let demoProfileYaml = DEMO_PROFILE_YAML;
+
+/** Session-added source documents, prepended to the seeded demo documents. */
+const demoProfileDocs: ProfileDocument[] = [];
 
 const DEMO_ACTIONABLE_IDS = new Set(["applied", "responded", "interview"]);
 const APPLIED_FIRST = DEMO_CADENCE_CONFIG.applied_first;
@@ -516,4 +539,110 @@ export class DemoDataSource implements DataSource {
       patterns: patternsSchema.parse(buildDemoPatterns(apps, facets, todayISO())),
     };
   }
+
+  /* ---------------------------------------------------- Profile --- */
+
+  async getProfile(): Promise<ProfileData> {
+    return {
+      profile: parseProfile(demoProfileYaml),
+      documents: [...demoProfileDocs, ...DEMO_PROFILE_DOCUMENTS],
+      texts: DEMO_PROFILE_TEXTS,
+    };
+  }
+
+  /** In-memory single-field edit — reuses the REAL `setYamlScalar`. */
+  async updateProfileField(input: UpdateProfileFieldInput): Promise<Profile> {
+    const parsed = updateProfileFieldInputSchema.safeParse(input);
+    if (!parsed.success) {
+      throw new ProfileWriteError(
+        "INVALID_INPUT",
+        parsed.error.issues[0]?.message ?? "Invalid profile edit.",
+      );
+    }
+    const { field, value, expected } = parsed.data;
+    const [parentKey, childKey] = field.split(".");
+
+    if (typeof expected === "string") {
+      const current = parseProfile(demoProfileYaml);
+      const seen = readProfileField(current, field);
+      if (seen !== expected.trim()) {
+        throw new ProfileWriteError(
+          "STALE_FIELD",
+          "This field changed since you loaded it — reload and try again.",
+        );
+      }
+    }
+
+    const updated = setYamlScalar(demoProfileYaml, parentKey, childKey, value);
+    if (updated === null) {
+      throw new ProfileWriteError(
+        "NOT_FOUND",
+        `Could not locate "${field}" in the demo profile.`,
+      );
+    }
+    const profile = parseProfile(updated); // round-trip / validation gate
+    demoProfileYaml = updated;
+    return profile;
+  }
+
+  /** In-memory document add (bytes are discarded — demo never serves files). */
+  async addProfileDocument(
+    filename: string,
+    bytes: Uint8Array,
+  ): Promise<ProfileDocument> {
+    const base = filename.split(/[\\/]/).pop()?.trim() ?? "";
+    const dot = base.lastIndexOf(".");
+    const ext = dot > 0 ? base.slice(dot + 1).toLowerCase() : "";
+    if (base === "" || !(PROFILE_UPLOAD_EXTS as readonly string[]).includes(ext)) {
+      throw new ProfileWriteError(
+        "INVALID_INPUT",
+        `Unsupported file type. Allowed: ${PROFILE_UPLOAD_EXTS.join(", ")}.`,
+      );
+    }
+    if (bytes.byteLength === 0) {
+      throw new ProfileWriteError("INVALID_INPUT", "The file is empty.");
+    }
+    if (bytes.byteLength > PROFILE_UPLOAD_MAX_BYTES) {
+      throw new ProfileWriteError("INVALID_INPUT", "File is too large.");
+    }
+    const doc: ProfileDocument = {
+      name: base,
+      ext,
+      kind: profileDocumentKind(ext),
+      sizeBytes: bytes.byteLength,
+      modifiedMs: Date.now(),
+    };
+    demoProfileDocs.unshift(doc);
+    return doc;
+  }
+
+  /** Demo mode never serves real bytes — previews 404 gracefully. */
+  async readProfileDocument(): Promise<{ bytes: Uint8Array; ext: string } | null> {
+    return null;
+  }
+}
+
+/** Read a scalar profile field by its YAML `parent.child` path ("" if unset). */
+function readProfileField(profile: Profile, field: string): string {
+  const map: Record<string, string | null | undefined> = {
+    "candidate.full_name": profile.candidate.fullName,
+    "candidate.email": profile.candidate.email,
+    "candidate.phone": profile.candidate.phone,
+    "candidate.location": profile.candidate.location,
+    "candidate.linkedin": profile.candidate.linkedin,
+    "candidate.portfolio_url": profile.candidate.portfolioUrl,
+    "candidate.github": profile.candidate.github,
+    "narrative.headline": profile.narrative.headline,
+    "narrative.exit_story": profile.narrative.exitStory,
+    "compensation.target_range": profile.compensation.targetRange,
+    "compensation.currency": profile.compensation.currency,
+    "compensation.minimum": profile.compensation.minimum,
+    "compensation.location_flexibility": profile.compensation.locationFlexibility,
+    "location.country": profile.location.country,
+    "location.city": profile.location.city,
+    "location.timezone": profile.location.timezone,
+    "location.visa_status": profile.location.visaStatus,
+    "cover_letter.primary_domain": profile.coverLetter.primaryDomain,
+  };
+  return (map[field] ?? "").trim();
 }

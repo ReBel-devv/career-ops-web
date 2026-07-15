@@ -17,6 +17,9 @@ import {
   outreachContactSchema,
   patternsResultSchema,
   pipelineItemSchema,
+  profileDataSchema,
+  profileDocumentSchema,
+  profileSchema,
   reportFacetSchema,
   reportSchema,
   scanRecordSchema,
@@ -33,9 +36,13 @@ import {
   type AddManualOfferInput,
   type PatternsResult,
   type PipelineItem,
+  type Profile,
+  type ProfileData,
+  type ProfileDocument,
   type Report,
   type ReportFacet,
   type ScanRecord,
+  type UpdateProfileFieldInput,
 } from "@/lib/domain";
 
 /**
@@ -698,4 +705,77 @@ export function useFollowUpActions() {
     },
     isPending: reschedule.isPending || log.isPending,
   };
+}
+
+/* ----------------------------------------------------------- Profile --- */
+
+export const profileKey = ["profile"] as const;
+
+const updateProfileResponse = z.object({ profile: profileSchema });
+const addProfileDocumentResponse = z.object({ document: profileDocumentSchema });
+
+/** The candidate profile aggregate (profile.yml + documents + texts). */
+export function useProfile() {
+  return useQuery({
+    queryKey: profileKey,
+    queryFn: async (): Promise<ProfileData> => {
+      const json = await fetchJson("/api/profile");
+      return profileDataSchema.parse(json);
+    },
+  });
+}
+
+/**
+ * Profile mutations. Field edits PATCH one scalar of profile.yml and write the
+ * returned profile straight back into the cache (no refetch); document uploads
+ * POST multipart and prepend the created descriptor. Both surface toasts.
+ */
+export function useProfileActions() {
+  const qc = useQueryClient();
+
+  const updateField = useMutation<Profile, Error, UpdateProfileFieldInput>({
+    mutationFn: async (input) => {
+      const res = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+      return updateProfileResponse.parse(json).profile;
+    },
+    onSuccess: (profile) => {
+      qc.setQueryData<ProfileData>(profileKey, (prev) =>
+        prev ? { ...prev, profile } : prev,
+      );
+    },
+  });
+
+  const addDocument = useMutation<ProfileDocument, Error, File>({
+    mutationFn: async (file) => {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/profile/documents", {
+        method: "POST",
+        body: form,
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+      return addProfileDocumentResponse.parse(json).document;
+    },
+    onSuccess: (document) => {
+      qc.setQueryData<ProfileData>(profileKey, (prev) =>
+        prev
+          ? { ...prev, documents: [document, ...prev.documents] }
+          : prev,
+      );
+      toast.success(`Uploaded ${document.name}`);
+    },
+    onError: (error) =>
+      toast.error("Couldn't upload the document", {
+        description: error instanceof Error ? error.message : String(error),
+      }),
+  });
+
+  return { updateField, addDocument };
 }

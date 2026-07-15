@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { Settings, User } from "lucide-react";
+import { Settings, User, UserRound } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-/** Avatar menu — on mobile this is the only route to Settings (plan §2). */
+/**
+ * Avatar menu (top-right) — the route to Profile and Settings on every
+ * breakpoint. Kept out of the primary nav so the mobile tab bar stays at 5.
+ */
 export function AvatarMenu() {
   return (
     <DropdownMenu>
@@ -20,6 +24,13 @@ export function AvatarMenu() {
         <User className="size-4.5" aria-hidden />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        <DropdownMenuItem asChild>
+          <Link href="/profile">
+            <UserRound aria-hidden />
+            Profile
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
           <Link href="/settings">
             <Settings aria-hidden />

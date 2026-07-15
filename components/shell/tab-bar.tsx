@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { isActive, NAV_ITEMS } from "./nav-items";
 
-/** Mobile-only bottom tab bar (5 tabs). Settings lives behind the avatar menu. */
+/** Mobile-only bottom tab bar (5 tabs). Profile + Settings live behind the
+ * avatar menu (top-right). */
 export function TabBar() {
   const pathname = usePathname();
 

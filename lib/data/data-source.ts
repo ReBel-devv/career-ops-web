@@ -14,6 +14,9 @@ import type {
   OutreachRecord,
   PatternsResult,
   PipelineItem,
+  Profile,
+  ProfileData,
+  ProfileDocument,
   Report,
   ReportFacet,
   RescheduleFollowUpInput,
@@ -21,6 +24,7 @@ import type {
   UpdateApplicationInput,
   UpdateApplicationResult,
   UpdateOutreachContactInput,
+  UpdateProfileFieldInput,
 } from "@/lib/domain";
 
 /**
@@ -104,4 +108,34 @@ export interface DataSource {
   deleteOutreachContact(
     input: DeleteOutreachContactInput,
   ): Promise<OutreachMutationResult>;
+
+  /* ------------------------------------------------------- Profile --- */
+
+  /**
+   * The candidate profile surface: parsed `config/profile.yml` + the source
+   * documents that feed it (`sources/`) + the long-form profile texts (cv.md,
+   * article-digest.md, voice-dna.md, writing-samples/). Read-only aggregate.
+   */
+  getProfile(): Promise<ProfileData>;
+  /**
+   * Edit ONE scalar field of profile.yml (surgical, comment-preserving).
+   * Throws `ProfileWriteError` (INVALID_INPUT/READ_ONLY/NOT_FOUND/STALE_FIELD/
+   * LOCK_TIMEOUT/PARSE_FAILED). Returns the re-parsed profile.
+   */
+  updateProfileField(input: UpdateProfileFieldInput): Promise<Profile>;
+  /**
+   * Save an uploaded source document to `sources/` (never overwrites). Throws
+   * `ProfileWriteError` (INVALID_INPUT/READ_ONLY). Returns the descriptor.
+   */
+  addProfileDocument(
+    filename: string,
+    bytes: Uint8Array,
+  ): Promise<ProfileDocument>;
+  /**
+   * Read a single source document's bytes for streaming/preview, or null when
+   * absent. `name` is a plain basename inside `sources/` (traversal-guarded).
+   */
+  readProfileDocument(
+    name: string,
+  ): Promise<{ bytes: Uint8Array; ext: string } | null>;
 }
