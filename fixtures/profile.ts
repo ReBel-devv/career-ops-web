@@ -20,7 +20,7 @@ candidate:
 
 target_roles:
   primary:
-    - "Frontend Engineer (React / Next.js / TypeScript)"
+    - "Frontend Engineer (React / Next.js)"
     - "Product Engineer (TypeScript / Node.js)"
     - "Design Engineer (UI / Motion)"
   archetypes:

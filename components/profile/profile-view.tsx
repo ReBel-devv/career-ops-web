@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Banknote, BadgeCheck, ExternalLink, MapPin } from "lucide-react";
+import { Banknote, ExternalLink, MapPin } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -172,10 +172,11 @@ export function ProfileView() {
 /** Identity hero: monogram + editable name/headline + key-fact chips. */
 function ProfileHero({ profile }: { profile: Profile }) {
   const c = profile.candidate;
+  // Only short, single-line facts belong in the hero as chips. Long-form values
+  // (e.g. visa status) live in the editable "Location & eligibility" card.
   const chips: Array<{ icon: LucideIcon; value: string | null }> = [
     { icon: MapPin, value: c.location ?? profile.location.city },
     { icon: Banknote, value: profile.compensation.targetRange },
-    { icon: BadgeCheck, value: profile.location.visaStatus },
   ];
   return (
     <section className="rounded-xl border bg-card p-5 shadow-xs md:p-6">
@@ -214,7 +215,7 @@ function ProfileHero({ profile }: { profile: Profile }) {
                   return (
                     <Badge key={i} variant="outline" className="gap-1.5 font-normal">
                       <Icon className="text-muted-foreground" aria-hidden />
-                      <span className="min-w-0 break-words">{chip.value}</span>
+                      <span className="min-w-0 truncate">{chip.value}</span>
                     </Badge>
                   );
                 })}
@@ -320,7 +321,7 @@ function TargetRolesCard({ profile }: { profile: Profile }) {
             <div className="flex flex-wrap gap-1.5">
               {t.primary.map((role, i) => (
                 <Badge key={i} variant="secondary" className="font-normal">
-                  {role}
+                  <span className="min-w-0 truncate">{role}</span>
                 </Badge>
               ))}
             </div>
