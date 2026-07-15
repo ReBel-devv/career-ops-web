@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import {
   Download,
+  ExternalLink,
   Eye,
   FileText,
   FileType2,
@@ -194,9 +195,20 @@ export function ProfileDocuments({ documents }: { documents: ProfileDocument[] }
 
       <Dialog open={preview !== null} onOpenChange={(o) => !o && setPreview(null)}>
         <DialogContent className="flex h-[85vh] max-w-4xl flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
-          <DialogHeader className="shrink-0 border-b px-4 py-3 pr-10">
+          <DialogHeader className="shrink-0 border-b px-4 py-3 pr-16">
             <DialogTitle className="truncate text-sm">{preview?.name}</DialogTitle>
           </DialogHeader>
+          {preview ? (
+            <a
+              href={docUrl(preview.name)}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Open in a new tab"
+              className="absolute top-3.5 right-10 rounded-sm text-muted-foreground opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <ExternalLink className="size-4" aria-hidden />
+            </a>
+          ) : null}
           {preview ? (
             <iframe
               key={preview.name}
