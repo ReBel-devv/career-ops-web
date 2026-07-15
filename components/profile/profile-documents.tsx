@@ -193,8 +193,8 @@ export function ProfileDocuments({ documents }: { documents: ProfileDocument[] }
       ) : null}
 
       <Dialog open={preview !== null} onOpenChange={(o) => !o && setPreview(null)}>
-        <DialogContent className="h-[85vh] max-w-4xl gap-0 p-0 sm:max-w-4xl">
-          <DialogHeader className="border-b px-4 py-3">
+        <DialogContent className="flex h-[85vh] max-w-4xl flex-col gap-0 overflow-hidden p-0 sm:max-w-4xl">
+          <DialogHeader className="shrink-0 border-b px-4 py-3 pr-10">
             <DialogTitle className="truncate text-sm">{preview?.name}</DialogTitle>
           </DialogHeader>
           {preview ? (
@@ -202,7 +202,7 @@ export function ProfileDocuments({ documents }: { documents: ProfileDocument[] }
               key={preview.name}
               src={docUrl(preview.name)}
               title={preview.name}
-              className="h-full w-full flex-1 rounded-b-lg bg-white"
+              className="min-h-0 w-full flex-1 bg-white"
             />
           ) : null}
         </DialogContent>
