@@ -21,6 +21,7 @@ import {
   type LogFollowUpInput,
   type OutreachMutationResult,
   type OutreachRecord,
+  type GeneratedDocument,
   type PatternsResult,
   type PipelineItem,
   type Profile,
@@ -42,6 +43,7 @@ import { isReportFile, parseReport, reportFacet } from "@/lib/parsers/report";
 import { parseFollowUps } from "@/lib/parsers/follow-ups";
 import { parsePipeline } from "@/lib/parsers/pipeline";
 import { matchDocuments, parsePdfIndex } from "@/lib/parsers/documents";
+import { buildGeneratedDocuments } from "@/lib/parsers/generated-docs";
 import { matchInterviewPrep } from "@/lib/parsers/interview-prep";
 import {
   runAnalyzePatterns,
@@ -240,6 +242,45 @@ export class FsDataSource implements DataSource {
               .map((a) => ({ num: a.num, company: a.company, role: a.role })),
           }
         : {}),
+    });
+  }
+
+  /** Every generated CV + cover letter across all applications (library). */
+  async getGeneratedDocuments(): Promise<GeneratedDocument[]> {
+    const [indexContent, outputNames, apps] = await Promise.all([
+      fs.readFile(this.resolve("data", "pdf-index.tsv"), "utf8").catch((e: unknown) => {
+        if (isNotFound(e)) return "";
+        throw e;
+      }),
+      fs.readdir(this.resolve("output")).catch((e: unknown) => {
+        if (isNotFound(e)) return [] as string[];
+        throw e;
+      }),
+      this.getApplications().catch(() => [] as Application[]),
+    ]);
+
+    const pdfNames = outputNames.filter((n) => n.toLowerCase().endsWith(".pdf"));
+    const outputFiles = await Promise.all(
+      pdfNames.map(async (name) => {
+        try {
+          const stat = await fs.stat(this.resolve("output", name));
+          return { name, sizeBytes: stat.size, mtimeMs: stat.mtimeMs };
+        } catch {
+          return { name, sizeBytes: 0, mtimeMs: 0 };
+        }
+      }),
+    );
+
+    return buildGeneratedDocuments({
+      indexEntries: parsePdfIndex(indexContent),
+      outputFiles,
+      apps: apps.map((a) => ({
+        num: a.num,
+        company: a.company,
+        role: a.role,
+        statusId: a.statusId,
+        statusLabel: a.statusLabel,
+      })),
     });
   }
 

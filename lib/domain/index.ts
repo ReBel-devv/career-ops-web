@@ -1,6 +1,7 @@
 export * from "./application";
 export * from "./cadence";
 export * from "./document";
+export * from "./generated-doc";
 export * from "./followup";
 export * from "./interview-prep";
 export * from "./outreach";

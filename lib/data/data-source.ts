@@ -5,6 +5,7 @@ import type {
   CanonicalState,
   DeleteOutreachContactInput,
   Document,
+  GeneratedDocument,
   FollowUpCadence,
   InterviewPrepFile,
   FollowUpData,
@@ -49,6 +50,11 @@ export interface DataSource {
   getReportFacets(): Promise<ReportFacet[]>;
   /** Generated documents (CV + cover letters) for an application. (M3) */
   getDocuments(num: number): Promise<Document[]>;
+  /**
+   * Every generated CV + cover letter across all applications, enriched with
+   * the linked company/role/status and the generation date — the library view.
+   */
+  getGeneratedDocuments(): Promise<GeneratedDocument[]>;
   /** Company-specific interview-prep markdown files for an application, if any. */
   getInterviewPrep(num: number): Promise<InterviewPrepFile[]>;
   /** Logged follow-ups + pins. (M4) */

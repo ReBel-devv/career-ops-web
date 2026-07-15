@@ -12,6 +12,7 @@ import {
   type CadenceEntry,
   type DeleteOutreachContactInput,
   type Document,
+  type GeneratedDocument,
   type FollowUpCadence,
   type FollowUpData,
   type FollowUpLog,
@@ -63,6 +64,7 @@ import { DEMO_CADENCE_CONFIG, DEMO_FOLLOW_UP_SEEDS } from "@/fixtures/follow-ups
 import { buildDemoOutreach } from "@/fixtures/outreach";
 import { DEMO_PIPELINE_MD, DEMO_SCAN_HISTORY } from "@/fixtures/discovery";
 import { DEMO_DOCUMENTS } from "@/fixtures/pdfs";
+import { buildDemoGeneratedDocuments } from "@/fixtures/generated-docs";
 import { buildDemoPatterns } from "@/fixtures/patterns";
 import {
   DEMO_PROFILE_DOCUMENTS,
@@ -303,6 +305,10 @@ export class DemoDataSource implements DataSource {
 
   async getDocuments(num: number): Promise<Document[]> {
     return DEMO_DOCUMENTS[num] ?? [];
+  }
+
+  async getGeneratedDocuments(): Promise<GeneratedDocument[]> {
+    return buildDemoGeneratedDocuments();
   }
 
   async getInterviewPrep(num: number): Promise<InterviewPrepFile[]> {

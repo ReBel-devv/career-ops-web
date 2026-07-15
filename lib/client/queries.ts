@@ -14,6 +14,7 @@ import {
   followUpCadenceSchema,
   interviewPrepFileSchema,
   followUpDataSchema,
+  generatedDocumentSchema,
   outreachContactSchema,
   patternsResultSchema,
   pipelineItemSchema,
@@ -34,6 +35,7 @@ import {
   type OutreachRecord,
   type OutreachStage,
   type AddManualOfferInput,
+  type GeneratedDocument,
   type PatternsResult,
   type PipelineItem,
   type Profile,
@@ -705,6 +707,23 @@ export function useFollowUpActions() {
     },
     isPending: reschedule.isPending || log.isPending,
   };
+}
+
+/* ------------------------------------------------- Documents library --- */
+
+const generatedDocumentsResponse = z.object({
+  documents: z.array(generatedDocumentSchema),
+});
+
+/** Every generated CV + cover letter across applications (read-only). */
+export function useGeneratedDocuments() {
+  return useQuery({
+    queryKey: ["generated-documents"] as const,
+    queryFn: async (): Promise<GeneratedDocument[]> => {
+      const json = await fetchJson("/api/documents");
+      return generatedDocumentsResponse.parse(json).documents;
+    },
+  });
 }
 
 /* ----------------------------------------------------------- Profile --- */

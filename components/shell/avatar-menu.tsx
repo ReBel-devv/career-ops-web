@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Settings, User, UserRound } from "lucide-react";
+import { FileText, Settings, User, UserRound } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,6 +28,12 @@ export function AvatarMenu() {
           <Link href="/profile">
             <UserRound aria-hidden />
             Profile
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/documents">
+            <FileText aria-hidden />
+            CVs &amp; Letters
           </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
