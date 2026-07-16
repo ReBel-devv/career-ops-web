@@ -103,7 +103,7 @@ function PipelineRow({ item }: { item: PipelineItem }) {
     return (
       <li className="flex items-start gap-3 px-3 py-2.5">
         <KindBadge kind={item.kind} />
-        <p className="text-data text-muted-foreground">
+        <p className="min-w-0 break-words text-data text-muted-foreground">
           {item.raw.replace(/^-\s*\[screened\]\s*/i, "")}
         </p>
       </li>
