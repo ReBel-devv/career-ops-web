@@ -58,7 +58,11 @@ export function AssistantWidget() {
   if (hidden) return null;
 
   return (
-    <div className="fixed right-4 bottom-[calc(3.5rem+env(safe-area-inset-bottom)+0.75rem)] z-40 flex flex-col items-end gap-3 md:right-6 md:bottom-6">
+    // pointer-events-none: the wrapper's layout box spans the (closed) panel
+    // area — without it, a ~400×560px dead zone floats over every page's
+    // bottom-right corner and swallows clicks/drags (found via the /analytics
+    // globe). Interactive children re-enable pointer events themselves.
+    <div className="pointer-events-none fixed right-4 bottom-[calc(3.5rem+env(safe-area-inset-bottom)+0.75rem)] z-40 flex flex-col items-end gap-3 md:right-6 md:bottom-6">
       <div
         // React 19 `inert`: fully removes the closed panel from tab/a11y order.
         inert={!open}

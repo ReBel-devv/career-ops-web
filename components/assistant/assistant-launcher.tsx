@@ -111,7 +111,9 @@ export function AssistantLauncher({
         setPressed(false);
       }}
       className={cn(
-        "relative flex size-11 items-center justify-center overflow-hidden rounded-full border-[1.5px] border-border bg-background shadow-lg md:size-13",
+        // pointer-events-auto: the widget wrapper is pointer-events-none (its
+        // box covers page content), so the button re-enables events itself.
+        "pointer-events-auto relative flex size-11 items-center justify-center overflow-hidden rounded-full border-[1.5px] border-border bg-background shadow-lg md:size-13",
         "transition-colors duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         showFill ? "text-background" : "text-foreground",
