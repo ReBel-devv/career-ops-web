@@ -11,6 +11,7 @@
  */
 import { z } from "zod";
 import { getConfig } from "@/lib/config";
+import { rejectCrossOrigin } from "@/lib/assistant/origin-guard";
 import {
   CONVERSATION_ID_RE,
   deleteConversation,
@@ -23,7 +24,9 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function guard(): Response | null {
+function guard(request: Request): Response | null {
+  const crossOrigin = rejectCrossOrigin(request);
+  if (crossOrigin) return crossOrigin;
   const config = getConfig();
   if (!config.assistantEnabled || !config.careerOpsPath) {
     return Response.json({ error: "The assistant is disabled." }, { status: 403 });
@@ -33,8 +36,8 @@ function guard(): Response | null {
 
 type Ctx = { params: Promise<{ id: string }> };
 
-export async function GET(_request: Request, ctx: Ctx): Promise<Response> {
-  const denied = guard();
+export async function GET(request: Request, ctx: Ctx): Promise<Response> {
+  const denied = guard(request);
   if (denied) return denied;
   const { id } = await ctx.params;
   const conversation = readConversation(id);
@@ -45,7 +48,7 @@ export async function GET(_request: Request, ctx: Ctx): Promise<Response> {
 }
 
 export async function PUT(request: Request, ctx: Ctx): Promise<Response> {
-  const denied = guard();
+  const denied = guard(request);
   if (denied) return denied;
   const { id } = await ctx.params;
   if (!CONVERSATION_ID_RE.test(id)) {
@@ -77,7 +80,7 @@ export async function PUT(request: Request, ctx: Ctx): Promise<Response> {
 const renameSchema = z.object({ title: z.string().trim().min(1).max(300) });
 
 export async function PATCH(request: Request, ctx: Ctx): Promise<Response> {
-  const denied = guard();
+  const denied = guard(request);
   if (denied) return denied;
   const { id } = await ctx.params;
 
@@ -103,8 +106,8 @@ export async function PATCH(request: Request, ctx: Ctx): Promise<Response> {
   return Response.json({ conversation: entry });
 }
 
-export async function DELETE(_request: Request, ctx: Ctx): Promise<Response> {
-  const denied = guard();
+export async function DELETE(request: Request, ctx: Ctx): Promise<Response> {
+  const denied = guard(request);
   if (denied) return denied;
   const { id } = await ctx.params;
   const existed = deleteConversation(id);

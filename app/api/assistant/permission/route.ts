@@ -7,6 +7,7 @@
  */
 import { z } from "zod";
 import { getConfig } from "@/lib/config";
+import { rejectCrossOrigin } from "@/lib/assistant/origin-guard";
 import { resolvePermission } from "@/lib/assistant/permission-bridge";
 
 export const runtime = "nodejs";
@@ -19,6 +20,9 @@ const permissionRequestSchema = z.object({
 });
 
 export async function POST(request: Request): Promise<Response> {
+  const crossOrigin = rejectCrossOrigin(request);
+  if (crossOrigin) return crossOrigin;
+
   const config = getConfig();
   if (!config.assistantEnabled || !config.careerOpsPath) {
     return Response.json({ error: "The assistant is disabled." }, { status: 403 });

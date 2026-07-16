@@ -5,6 +5,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import type { AssistantEvent, AssistantMode } from "@/lib/assistant/types";
 import { invalidationKeysForPath } from "./invalidation";
 import { conversationsKey } from "./use-conversations";
+import { useAssistantSettings } from "./use-assistant-settings";
 import type { ChatMessage, ChatStatus } from "./types";
 
 let counter = 0;
@@ -135,6 +136,21 @@ export function useAssistantChat() {
   // existing conversation doesn't immediately re-save (and reorder history).
   const dirtyRef = useRef(false);
   const qc = useQueryClient();
+  const settings = useAssistantSettings();
+  const settingsRef = useRef(settings);
+
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
+  // A fresh, untouched surface follows the user's default autonomy preference
+  // (each conversation can still toggle it afterwards).
+  useEffect(() => {
+    if (!conversationIdRef.current && messagesRef.current.length === 0) {
+      modeRef.current = settings.defaultMode;
+      setModeState(settings.defaultMode);
+    }
+  }, [settings.defaultMode]);
 
   // Keep a ref of the latest messages so we can persist after a turn without a
   // stale closure.
@@ -269,6 +285,8 @@ export function useAssistantChat() {
             message: trimmed,
             resume: sessionIdRef.current,
             mode: modeRef.current,
+            model: settingsRef.current.model,
+            effort: settingsRef.current.effort,
           }),
           signal: controller.signal,
         });
@@ -352,8 +370,8 @@ export function useAssistantChat() {
     titleRef.current = "";
     createdAtRef.current = 0;
     dirtyRef.current = false;
-    modeRef.current = "confirmation";
-    setModeState("confirmation");
+    modeRef.current = settingsRef.current.defaultMode;
+    setModeState(settingsRef.current.defaultMode);
     setActiveId(null);
     setMessages([]);
     setStatus("idle");

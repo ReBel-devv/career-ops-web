@@ -13,6 +13,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { AssistantLauncher } from "./assistant-launcher";
+import { AssistantSettingsPopover } from "./assistant-settings";
 import { AssistantSurface } from "./assistant-surface";
 import { ConversationList } from "./conversation-list";
 import { useAssistantChat } from "./use-assistant-chat";
@@ -83,6 +84,7 @@ export function AssistantWidget() {
               career-ops · {assistantWritable ? "edits need approval" : "read-only"}
             </p>
           </div>
+          <AssistantSettingsPopover />
           <TooltipProvider delayDuration={300}>
             <Tooltip>
               <TooltipTrigger asChild>

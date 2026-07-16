@@ -75,6 +75,33 @@ There is no step where your data could leak, structurally:
 - `.env.local`, real-data test snapshots (`tests/fixtures/real/`), and copied
   parser modules are gitignored.
 
+## Embedded assistant (local only)
+
+A conversational agent — powered by the
+[Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk) — lives in a
+floating bubble on every page and full-screen at `/assistant`. It operates
+directly on your career-ops repo (`cwd = CAREER_OPS_PATH`): ask about your
+pipeline, have it edit `config/profile.yml`, run CLI modes, or commit locally.
+
+- **Strictly local.** Enabled only with a real `CAREER_OPS_PATH`, never in
+  `DEMO_MODE` or on a Vercel build (`ASSISTANT_ENABLED=false` force-disables
+  it). Auth reuses your Claude Code login (`claude login`), or
+  `ANTHROPIC_API_KEY` if set — no key is ever entered in the app.
+- **Every mutation is confirmed.** Write/Edit show a diff card, Bash shows the
+  command; approve once or for the whole conversation. An optional
+  **autonomous mode** (per conversation, clear banner) skips confirmations.
+- **Hard guardrails, even in autonomous mode:** file writes are confined to
+  the repo; `git push`, `sudo`, `rm -rf`, piping downloads into a shell and
+  out-of-repo redirects are refused before they run (`lib/assistant/guardrails.ts`,
+  unit-tested). `git commit` is allowed — with confirmation. `READ_ONLY=true`
+  removes all mutating tools.
+- **Transparent & persistent.** Every tool call lands in a collapsible action
+  journal; conversations are stored in the gitignored `.assistant/` folder
+  with resume, rename and delete. After an approved edit the dashboard
+  refreshes itself (query invalidation).
+- **Tunable.** Model (Opus 4.8 default), reasoning effort and the default
+  autonomy for new chats are adjustable from the ⚙ settings popover.
+
 ## Scripts
 
 | Command | What it does |

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { History, Plus, Sparkles, X } from "lucide-react";
 import { useClientConfig } from "@/components/providers/app-providers";
+import { AssistantSettingsPopover } from "./assistant-settings";
 import { AssistantSurface } from "./assistant-surface";
 import { ConversationList } from "./conversation-list";
 import { useAssistantChat } from "./use-assistant-chat";
@@ -17,6 +18,16 @@ export function AssistantPage() {
   const convos = useConversations();
   const { assistantWritable } = useClientConfig();
   const [historyOpen, setHistoryOpen] = useState(false);
+
+  // Escape closes the mobile history drawer.
+  useEffect(() => {
+    if (!historyOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setHistoryOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [historyOpen]);
 
   const select = (id: string) => {
     void chat.load(id);
@@ -70,6 +81,7 @@ export function AssistantPage() {
               Operates on your career-ops repo · {assistantWritable ? "edits need approval" : "read-only"}
             </p>
           </div>
+          <AssistantSettingsPopover />
           <button
             type="button"
             onClick={newChat}

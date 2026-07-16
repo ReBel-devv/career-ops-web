@@ -7,6 +7,7 @@
 import { z } from "zod";
 import { getConfig } from "@/lib/config";
 import { EFFORT_LEVELS } from "@/lib/assistant/config";
+import { rejectCrossOrigin } from "@/lib/assistant/origin-guard";
 import { runAssistant } from "@/lib/assistant/runner";
 import { sseStream, SSE_HEADERS } from "@/lib/assistant/sse";
 import type { AssistantEffort } from "@/lib/assistant/types";
@@ -25,6 +26,9 @@ const chatRequestSchema = z.object({
 });
 
 export async function POST(request: Request): Promise<Response> {
+  const crossOrigin = rejectCrossOrigin(request);
+  if (crossOrigin) return crossOrigin;
+
   const config = getConfig();
   if (!config.assistantEnabled || !config.careerOpsPath) {
     return Response.json(
