@@ -320,7 +320,8 @@ export function KanbanBoard({
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="flex h-full gap-3 overflow-x-auto pb-2">
+      {/* scrollbar-subtle: same thin, rounded scrollbar as the columns' vertical ones. */}
+      <div className="scrollbar-subtle flex h-full gap-3 overflow-x-auto pb-2">
         {columns.map((column) => {
           const ids = items[column.state.id] ?? [];
           const apps = ids
