@@ -277,12 +277,14 @@ describe("filters — archetype + ATS vendor facets (M3)", () => {
       archetype: "Design Engineer (UI/Motion) + Frontend Engineer (React/Next.js)",
       atsVendor: "Lever",
       locationBucket: "EU",
+      location: null,
     },
     {
       num: otherReport.num,
       archetype: "Mobile Engineer (React Native)",
       atsVendor: "Greenhouse",
       locationBucket: null,
+      location: null,
     },
   ]);
 

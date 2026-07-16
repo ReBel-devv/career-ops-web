@@ -56,6 +56,40 @@ const FUNNEL_STAGES: ReadonlyArray<{
   { id: "offer", label: "Offer", ids: OFFER_ONLY },
 ];
 
+/**
+ * Rows dated within the trailing `days` window ([now - days, now]); rows with
+ * unparseable dates are dropped. Used by the /analytics range filter — pure so
+ * the cutoff math is testable (now injected).
+ */
+export function applicationsSince(
+  applications: ReadonlyArray<Application>,
+  days: number,
+  now: number,
+): Application[] {
+  const cutoff = now - days * 86_400_000;
+  return applications.filter((app) => {
+    const t = Date.parse(`${app.date}T00:00:00`);
+    return !Number.isNaN(t) && t >= cutoff && t <= now;
+  });
+}
+
+/**
+ * Client-side funnel counts for a FILTERED range — same status-id keying as
+ * the script's own `funnel` map (rows with unresolvable statuses skipped).
+ * Only used when a time range is active; the unfiltered view keeps the
+ * script's counts verbatim (F5).
+ */
+export function statusCounts(
+  applications: ReadonlyArray<Application>,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const app of applications) {
+    if (app.statusId === null) continue;
+    counts[app.statusId] = (counts[app.statusId] ?? 0) + 1;
+  }
+  return counts;
+}
+
 /** Build cumulative funnel stages from the script's `funnel` status counts. */
 export function funnelStages(funnel: Record<string, number>): FunnelStage[] {
   const stageCount = (ids: ReadonlySet<string> | null): number =>
@@ -128,6 +162,78 @@ export function scoreHistogram(
 }
 
 // ---------------------------------------------------------------------------
+// Weekly activity — tracker rows bucketed by ISO week (Monday start). The
+// tracker Date column is the evaluation date until a row turns Applied, when
+// it becomes the apply date (plan Decision 4) — so "tracked" counts every row
+// dated that week and "applied" the submitted ones.
+// ---------------------------------------------------------------------------
+
+export interface ActivityWeek {
+  /** Monday of the week, YYYY-MM-DD. */
+  week: string;
+  /** Short axis label, e.g. "Jul 6". */
+  label: string;
+  /** Rows dated within the week (evaluations + applications). */
+  tracked: number;
+  /** Of those, rows that reached at least Applied. */
+  applied: number;
+}
+
+const MS_PER_DAY = 86_400_000;
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+] as const;
+
+/** Monday 00:00 UTC of the date's ISO week. */
+function mondayOf(date: string): number | null {
+  const t = Date.parse(`${date}T00:00:00Z`);
+  if (Number.isNaN(t)) return null;
+  const day = new Date(t).getUTCDay(); // 0 = Sunday
+  return t - ((day + 6) % 7) * MS_PER_DAY;
+}
+
+function isoDate(t: number): string {
+  return new Date(t).toISOString().slice(0, 10);
+}
+
+/**
+ * Per-week tracked/applied counts, gap-filled with zero weeks between the
+ * first and last active week (interior gaps kept so the shape doesn't lie).
+ * Rows with unparseable dates are skipped.
+ */
+export function weeklyActivity(
+  applications: ReadonlyArray<Application>,
+): ActivityWeek[] {
+  const buckets = new Map<number, { tracked: number; applied: number }>();
+  for (const app of applications) {
+    const monday = mondayOf(app.date);
+    if (monday === null) continue;
+    const bucket = buckets.get(monday) ?? { tracked: 0, applied: 0 };
+    bucket.tracked += 1;
+    if (app.statusId !== null && SUBMITTED_STATUS_IDS.has(app.statusId)) {
+      bucket.applied += 1;
+    }
+    buckets.set(monday, bucket);
+  }
+  if (buckets.size === 0) return [];
+
+  const mondays = [...buckets.keys()].sort((a, b) => a - b);
+  const weeks: ActivityWeek[] = [];
+  for (let t = mondays[0]; t <= mondays[mondays.length - 1]; t += 7 * MS_PER_DAY) {
+    const bucket = buckets.get(t) ?? { tracked: 0, applied: 0 };
+    const d = new Date(t);
+    weeks.push({
+      week: isoDate(t),
+      label: `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`,
+      tracked: bucket.tracked,
+      applied: bucket.applied,
+    });
+  }
+  return weeks;
+}
+
+// ---------------------------------------------------------------------------
 // Archetype / location breakdowns — from M3 report facets when the script's
 // own breakdown is all "Unknown".
 // ---------------------------------------------------------------------------
@@ -188,6 +294,163 @@ export function locationBreakdownFromFacets(
   facets: ReadonlyArray<ReportFacet>,
 ): BreakdownDatum[] {
   return foldTail(countBy(facets.map((f) => f.locationBucket ?? "Unknown")));
+}
+
+// ---------------------------------------------------------------------------
+// Advance-rate breakdowns (score bands / archetype families) — same funnel
+// sets as lib/stats.ts (mirroring analyze-patterns), same honesty rules as the
+// vendor chart: low-n bars are grayed but never hidden, every rate carries n.
+// ---------------------------------------------------------------------------
+
+/** One advance-rate bar of a categorical breakdown. */
+export interface RateDatum {
+  label: string;
+  /** Submitted applications in the bucket. */
+  n: number;
+  /** Of those, how many advanced past screening. */
+  advanced: number;
+  /** Rounded %, advanced / n. */
+  rate: number;
+  /** Low sample (n < minSample) — rendered gray, never hidden. */
+  grayed: boolean;
+}
+
+function toRateData(
+  buckets: ReadonlyArray<{ label: string; n: number; advanced: number }>,
+  minSample: number,
+): RateDatum[] {
+  return buckets.map(({ label, n, advanced }) => ({
+    label,
+    n,
+    advanced,
+    rate: n > 0 ? Math.round((advanced / n) * 100) : 0,
+    grayed: n < minSample,
+  }));
+}
+
+/** Fixed score bands around the 3.5/4.0 decision thresholds. */
+const SCORE_BANDS: ReadonlyArray<{
+  label: string;
+  min: number;
+  max: number;
+}> = [
+  { label: "< 3.0", min: 0, max: 3 },
+  { label: "3.0–3.4", min: 3, max: 3.5 },
+  { label: "3.5–3.9", min: 3.5, max: 4 },
+  { label: "≥ 4.0", min: 4, max: Infinity },
+];
+
+/**
+ * Advance rate per score band, over SUBMITTED applications with a parseable
+ * score — does the tracker's scoring actually predict responses? Empty bands
+ * are kept so a hole in the middle stays visible.
+ */
+export function scoreOutcomeBands(
+  applications: ReadonlyArray<Application>,
+  minSample: number,
+): RateDatum[] {
+  const buckets = SCORE_BANDS.map((band) => ({
+    label: band.label,
+    n: 0,
+    advanced: 0,
+  }));
+  let any = false;
+  for (const app of applications) {
+    if (app.statusId === null || !SUBMITTED_STATUS_IDS.has(app.statusId)) continue;
+    if (app.score === null || app.score <= 0) continue;
+    const index = SCORE_BANDS.findIndex(
+      (band) => app.score! >= band.min && app.score! < band.max,
+    );
+    if (index === -1) continue;
+    any = true;
+    buckets[index].n += 1;
+    if (ADVANCED_STATUS_IDS.has(app.statusId)) buckets[index].advanced += 1;
+  }
+  return any ? toRateData(buckets, minSample) : [];
+}
+
+/**
+ * Advance rate per archetype family, from report facets + tracker statuses
+ * (a combined archetype counts toward each family). Sorted by n desc so the
+ * biggest bets read first; capped at 8 slots like every breakdown.
+ */
+export function archetypeYield(
+  facets: ReadonlyArray<ReportFacet>,
+  applications: ReadonlyArray<Application>,
+  minSample: number,
+): RateDatum[] {
+  const archetypeByNum = new Map(facets.map((f) => [f.num, f.archetype]));
+  const buckets = new Map<string, { n: number; advanced: number }>();
+  for (const app of applications) {
+    if (app.statusId === null || !SUBMITTED_STATUS_IDS.has(app.statusId)) continue;
+    const families = archetypeFamilies(archetypeByNum.get(app.num) ?? null);
+    for (const family of families) {
+      const bucket = buckets.get(family) ?? { n: 0, advanced: 0 };
+      bucket.n += 1;
+      if (ADVANCED_STATUS_IDS.has(app.statusId)) bucket.advanced += 1;
+      buckets.set(family, bucket);
+    }
+  }
+  const sorted = [...buckets.entries()]
+    .map(([label, { n, advanced }]) => ({ label, n, advanced }))
+    .sort((a, b) => b.n - a.n || a.label.localeCompare(b.label))
+    .slice(0, 8);
+  return toRateData(sorted, minSample);
+}
+
+// ---------------------------------------------------------------------------
+// Pipeline aging — submitted applications still waiting on a first reply
+// (status exactly `applied`), bucketed by days since the apply date.
+// ---------------------------------------------------------------------------
+
+export interface AgingBucket {
+  label: string;
+  count: number;
+  /** The "this is stale" bucket — the only one that may wear the negative color. */
+  stale: boolean;
+}
+
+export interface PipelineAging {
+  buckets: AgingBucket[];
+  /** Total applications waiting on a reply. */
+  waiting: number;
+  /** Age in days of the oldest waiting application, null when none. */
+  oldestDays: number | null;
+}
+
+const AGING_EDGES: ReadonlyArray<{ label: string; max: number }> = [
+  { label: "≤ 7d", max: 7 },
+  { label: "8–14d", max: 14 },
+  { label: "15–21d", max: 21 },
+  { label: "> 21d", max: Infinity },
+];
+
+/**
+ * Waiting = status exactly `applied` (submitted, no reply yet — rejected and
+ * advanced rows already got their answer). `now` is injected so the transform
+ * stays pure/testable; rows with unparseable dates are skipped.
+ */
+export function pipelineAging(
+  applications: ReadonlyArray<Application>,
+  now: number,
+): PipelineAging {
+  const buckets = AGING_EDGES.map(({ label }, i) => ({
+    label,
+    count: 0,
+    stale: i === AGING_EDGES.length - 1,
+  }));
+  let waiting = 0;
+  let oldestDays: number | null = null;
+  for (const app of applications) {
+    if (app.statusId !== "applied") continue;
+    const t = Date.parse(`${app.date}T00:00:00`);
+    if (Number.isNaN(t)) continue;
+    const days = Math.max(0, Math.floor((now - t) / 86_400_000));
+    waiting += 1;
+    oldestDays = oldestDays === null ? days : Math.max(oldestDays, days);
+    buckets[AGING_EDGES.findIndex((e) => days <= e.max)].count += 1;
+  }
+  return { buckets, waiting, oldestDays };
 }
 
 // ---------------------------------------------------------------------------

@@ -160,10 +160,12 @@
   --status-discarded: oklch(0.62 0.05 60);
   --status-skip: oklch(0.55 0.02 260);
 
-  /* Score ramp: high >= 4.0 (apply threshold), mid 3.0–3.9, low < 3.0. */
-  --score-high: oklch(0.74 0.12 150);
-  --score-mid: oklch(0.76 0.1 85);
-  --score-low: oklch(0.66 0.1 25);
+  /* Score ramp: high >= 4.0 (apply threshold), mid 3.0–3.9, low < 3.0.
+   * Richer chroma than the status hues (these are the page's only color
+   * accents — emerald / gold / red), L kept high enough for AA as text. */
+  --score-high: oklch(0.78 0.17 152);
+  --score-mid: oklch(0.82 0.16 80);
+  --score-low: oklch(0.7 0.19 25);
 
   /* Muted companions (subtle fills) — derived, theme-following. */
   --status-evaluated-muted: color-mix(in oklab, var(--status-evaluated) 14%, transparent);
@@ -226,10 +228,11 @@
     --status-skip: oklch(0.6 0.02 260);
 
     /* Darker than the dot/border-oriented status hues: these render as TEXT
-     * in score badges, so they must clear 4.5:1 on the /10 tint over white. */
-    --score-high: oklch(0.47 0.12 150);
-    --score-mid: oklch(0.5 0.11 80);
-    --score-low: oklch(0.5 0.14 25);
+     * in score badges, so they must clear 4.5:1 on the /10 tint over white.
+     * Chroma pushed to the gamut edge at this lightness — vivid, not pale. */
+    --score-high: oklch(0.49 0.14 150);
+    --score-mid: oklch(0.53 0.13 70);
+    --score-low: oklch(0.51 0.19 26);
   }
 }
 

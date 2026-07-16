@@ -114,6 +114,9 @@ export const reportFacetSchema = z.object({
   archetype: z.string().nullable(),
   atsVendor: z.string().nullable(),
   locationBucket: locationBucketSchema.nullable(),
+  /** Raw free-text location (Machine Summary / header) — feeds the offer map's
+   * city gazetteer (lib/geo.ts); the coarse bucket above stays the filter key. */
+  location: z.string().nullable().default(null),
 });
 
 export type ReportFacet = z.infer<typeof reportFacetSchema>;

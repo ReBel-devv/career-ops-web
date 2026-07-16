@@ -4,18 +4,24 @@ import type { ReactNode } from "react";
 
 /**
  * Shared chart chrome for /analytics (plan §6 + dataviz method):
- * - monochrome neutral ramp, ONE accent (--primary) as the single data hue;
- *   the only second "color" is the de-emphasis gray for low-n marks
+ * - monochrome: series wear the foreground (white on dark, near-black on
+ *   light); the only second "color" is the de-emphasis gray for low-n marks
+ * - red/green (score-ramp tokens) are reserved for STATE — KPI deltas, aging
+ *   alerts, globe score dots — never for bars or lines
  * - hairline solid grid/axes in --border, recessive
  * - text wears text tokens (never the series color); numbers are mono
  */
 
 /** Chart color/style tokens — CSS variables so dark/light both resolve. */
 export const CHART = {
-  /** The single data accent (muted blue, theme-tuned). */
-  accent: "var(--primary)",
+  /** The single data hue — monochrome foreground, like the rest of the site. */
+  accent: "var(--foreground)",
   /** De-emphasis gray for low-n / contextual marks. */
   grayed: "var(--chart-2)",
+  /** State colors — deltas and alerts only, never series. AA as text on card
+   * surfaces in both themes (see --score-* notes in globals.css). */
+  positive: "var(--score-high)",
+  negative: "var(--score-low)",
   /** Hairline grid + axis lines. */
   grid: "var(--border)",
   tick: { fill: "var(--muted-foreground)", fontSize: 11 },
@@ -34,23 +40,29 @@ export function ChartCard({
   children,
   footer,
   className,
+  aside,
 }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
   footer?: ReactNode;
   className?: string;
+  /** Right side of the header row — inline legend, meta chip. */
+  aside?: ReactNode;
 }) {
   return (
     <section
       aria-label={title}
       className={`flex flex-col gap-3 rounded-lg border bg-card p-4 ${className ?? ""}`}
     >
-      <header>
-        <h2 className="text-sm font-medium">{title}</h2>
-        {subtitle ? (
-          <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
-        ) : null}
+      <header className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-medium">{title}</h2>
+          {subtitle ? (
+            <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
+          ) : null}
+        </div>
+        {aside ? <div className="shrink-0">{aside}</div> : null}
       </header>
       {children}
       {footer ? (

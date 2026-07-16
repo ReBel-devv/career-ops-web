@@ -286,6 +286,8 @@ export function reportFacet(report: Report): ReportFacet {
     archetype: report.machineSummary?.archetype ?? report.header.archetype ?? null,
     atsVendor: report.atsVendor,
     locationBucket: report.locationBucket,
+    location:
+      report.machineSummary?.location ?? report.header.extras.location ?? null,
   };
 }
 

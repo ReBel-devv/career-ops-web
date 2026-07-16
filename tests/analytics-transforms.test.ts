@@ -1,13 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  applicationsSince,
   archetypeBreakdownFromFacets,
+  archetypeYield,
   foldTail,
   funnelStages,
   hasNamedArchetypes,
   locationBreakdownFromFacets,
+  pipelineAging,
   scoreHistogram,
+  scoreOutcomeBands,
+  statusCounts,
   vendorBarsFromFacets,
   vendorChartData,
+  weeklyActivity,
   type BreakdownDatum,
 } from "@/lib/analytics";
 import type {
@@ -84,6 +90,154 @@ describe("funnelStages", () => {
     const stages = funnelStages({});
     expect(stages.every((s) => s.count === 0)).toBe(true);
     expect(stages.every((s) => s.pctOfTotal === 0)).toBe(true);
+  });
+});
+
+describe("applicationsSince", () => {
+  const NOW = Date.parse("2026-07-16T12:00:00");
+
+  it("keeps rows inside the trailing window and drops bad dates", () => {
+    const rows = [
+      { ...app(1, "applied"), date: "2026-07-15" }, // 1d ago
+      { ...app(2, "evaluated"), date: "2026-07-01" }, // 15d ago
+      { ...app(3, "evaluated"), date: "2026-04-01" }, // out of 90d? no — ~106d
+      { ...app(4, "evaluated"), date: "garbage" },
+    ];
+    expect(applicationsSince(rows, 7, NOW).map((a) => a.num)).toEqual([1]);
+    expect(applicationsSince(rows, 30, NOW).map((a) => a.num)).toEqual([1, 2]);
+    expect(applicationsSince(rows, 90, NOW).map((a) => a.num)).toEqual([1, 2]);
+  });
+
+  it("excludes future-dated rows", () => {
+    const rows = [{ ...app(1, "applied"), date: "2026-08-01" }];
+    expect(applicationsSince(rows, 30, NOW)).toEqual([]);
+  });
+});
+
+describe("statusCounts", () => {
+  it("counts rows per canonical status id, skipping unresolved ones", () => {
+    const rows = [
+      app(1, "applied"),
+      app(2, "applied"),
+      app(3, "evaluated"),
+      app(4, null),
+    ];
+    expect(statusCounts(rows)).toEqual({ applied: 2, evaluated: 1 });
+  });
+});
+
+describe("weeklyActivity", () => {
+  it("buckets rows by ISO week and gap-fills interior zero weeks", () => {
+    const rows = [
+      { ...app(1, "evaluated"), date: "2026-06-01" }, // Monday
+      { ...app(2, "applied"), date: "2026-06-03" }, // same week
+      { ...app(3, "evaluated"), date: "2026-06-17" }, // two weeks later
+    ];
+    const weeks = weeklyActivity(rows);
+    expect(weeks.map((w) => [w.week, w.tracked, w.applied])).toEqual([
+      ["2026-06-01", 2, 1],
+      ["2026-06-08", 0, 0], // interior gap kept so the shape doesn't lie
+      ["2026-06-15", 1, 0],
+    ]);
+    expect(weeks[0].label).toBe("Jun 1");
+  });
+
+  it("counts every submitted status as applied and skips bad dates", () => {
+    const rows = [
+      { ...app(1, "rejected"), date: "2026-06-02" }, // submitted first, so counted
+      { ...app(2, "interview"), date: "2026-06-04" },
+      { ...app(3, "evaluated"), date: "not-a-date" },
+    ];
+    const weeks = weeklyActivity(rows);
+    expect(weeks).toHaveLength(1);
+    expect(weeks[0]).toMatchObject({ tracked: 2, applied: 2 });
+  });
+
+  it("returns [] when nothing has a parseable date", () => {
+    expect(weeklyActivity([])).toEqual([]);
+  });
+});
+
+describe("scoreOutcomeBands", () => {
+  it("computes advance rate per score band over submitted, scored rows", () => {
+    const apps = [
+      app(1, "applied", 4.2),
+      app(2, "interview", 4.1), // advanced
+      app(3, "rejected", 3.6),
+      app(4, "responded", 3.7), // advanced
+      app(5, "applied", 2.5),
+      app(6, "evaluated", 4.8), // never submitted → excluded
+      app(7, "applied", null), // unscored → excluded
+    ];
+    const bands = scoreOutcomeBands(apps, 2);
+    expect(bands.map((b) => [b.label, b.n, b.advanced, b.rate])).toEqual([
+      ["< 3.0", 1, 0, 0],
+      ["3.0–3.4", 0, 0, 0], // empty band kept — the hole stays visible
+      ["3.5–3.9", 2, 1, 50],
+      ["≥ 4.0", 2, 1, 50],
+    ]);
+    expect(bands[0].grayed).toBe(true); // n=1 < minSample 2
+    expect(bands[2].grayed).toBe(false);
+  });
+
+  it("returns [] when no submitted row carries a score", () => {
+    expect(scoreOutcomeBands([app(1, "evaluated", 4.0)], 2)).toEqual([]);
+    expect(scoreOutcomeBands([app(1, "applied", null)], 2)).toEqual([]);
+  });
+});
+
+describe("archetypeYield", () => {
+  it("computes advance rate per family; combined archetypes count each family", () => {
+    const apps = [
+      app(1, "interview"), // advanced
+      app(2, "applied"),
+      app(3, "rejected"),
+      app(4, "evaluated"), // not submitted → excluded
+    ];
+    const facets = [
+      facet(1, "Frontend Engineer (React/Next.js) + Design Engineer (UI/Motion)"),
+      facet(2, "Frontend Engineer (React)"),
+      facet(3, "Design Engineer"),
+      facet(4, "Frontend Engineer"),
+    ];
+    const yields = archetypeYield(facets, apps, 2);
+    expect(yields.map((y) => [y.label, y.n, y.advanced, y.rate, y.grayed])).toEqual([
+      ["Design Engineer", 2, 1, 50, false],
+      ["Frontend Engineer", 2, 1, 50, false],
+    ]);
+  });
+
+  it("skips submitted rows without an archetype facet", () => {
+    expect(archetypeYield([], [app(1, "applied")], 2)).toEqual([]);
+  });
+});
+
+describe("pipelineAging", () => {
+  const NOW = Date.parse("2026-07-16T12:00:00");
+
+  it("buckets waiting (status exactly applied) rows by days since apply date", () => {
+    const rows = [
+      { ...app(1, "applied"), date: "2026-07-14" }, // 2d
+      { ...app(2, "applied"), date: "2026-07-06" }, // 10d
+      { ...app(3, "applied"), date: "2026-06-10" }, // 36d → stale
+      { ...app(4, "responded"), date: "2026-06-01" }, // got a reply → excluded
+      { ...app(5, "rejected"), date: "2026-06-01" }, // answered → excluded
+    ];
+    const aging = pipelineAging(rows, NOW);
+    expect(aging.buckets.map((b) => [b.label, b.count, b.stale])).toEqual([
+      ["≤ 7d", 1, false],
+      ["8–14d", 1, false],
+      ["15–21d", 0, false],
+      ["> 21d", 1, true],
+    ]);
+    expect(aging.waiting).toBe(3);
+    expect(aging.oldestDays).toBe(36);
+  });
+
+  it("handles an empty pipeline", () => {
+    const aging = pipelineAging([app(1, "evaluated")], NOW);
+    expect(aging.waiting).toBe(0);
+    expect(aging.oldestDays).toBeNull();
   });
 });
 

@@ -21,6 +21,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "cobe": "^2.0.1",
     "geist": "^1.7.2",
     "js-yaml": "^5.2.1",
     "lucide-react": "^1.23.0",
