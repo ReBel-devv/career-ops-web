@@ -13,11 +13,17 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 export interface ClientConfig {
   readOnly: boolean;
   demoMode: boolean;
+  /** The embedded assistant is available (local, real repo, not disabled). */
+  assistantEnabled: boolean;
+  /** The assistant may perform mutations (false under READ_ONLY). */
+  assistantWritable: boolean;
 }
 
 const ConfigContext = createContext<ClientConfig>({
   readOnly: false,
   demoMode: false,
+  assistantEnabled: false,
+  assistantWritable: false,
 });
 
 export function useClientConfig(): ClientConfig {

@@ -55,3 +55,7 @@ next-env.d.ts
 
 # vendored local design skill (not shared with the repo)
 /.claude/skills/ui-ux-pro-max/
+
+# in-app assistant: local-only plan + stored conversations (never shared)
+/docs/ASSISTANT-PLAN.md
+/.assistant/

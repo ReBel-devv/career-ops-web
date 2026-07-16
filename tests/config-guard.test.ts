@@ -30,7 +30,14 @@ describe("getConfig", () => {
       DEMO_MODE: "true",
       READ_ONLY: "yes",
     });
-    expect(config).toEqual({ careerOpsPath: "/tmp/repo", demoMode: true, readOnly: true });
+    // Demo mode force-disables the assistant (and therefore writability).
+    expect(config).toEqual({
+      careerOpsPath: "/tmp/repo",
+      demoMode: true,
+      readOnly: true,
+      assistantEnabled: false,
+      assistantWritable: false,
+    });
   });
 
   it("treats blank CAREER_OPS_PATH as unset", () => {

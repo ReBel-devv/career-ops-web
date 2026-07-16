@@ -10,6 +10,7 @@ import { CommandPalette } from "@/components/command/command-palette";
 import { NavRail } from "@/components/shell/nav-rail";
 import { StatsHeader } from "@/components/shell/stats-header";
 import { TabBar } from "@/components/shell/tab-bar";
+import { AssistantWidget } from "@/components/assistant/assistant-widget";
 
 export const metadata: Metadata = {
   title: {
@@ -34,7 +35,14 @@ export default function RootLayout({
       className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full">
-        <AppProviders config={{ readOnly: config.readOnly, demoMode: config.demoMode }}>
+        <AppProviders
+          config={{
+            readOnly: config.readOnly,
+            demoMode: config.demoMode,
+            assistantEnabled: config.assistantEnabled,
+            assistantWritable: config.assistantWritable,
+          }}
+        >
           <div className="flex min-h-dvh">
             <NavRail />
             <div className="flex min-w-0 flex-1 flex-col">
@@ -44,6 +52,8 @@ export default function RootLayout({
             </div>
           </div>
           <TabBar />
+          {/* Local-only assistant bubble; hidden entirely when disabled. */}
+          {config.assistantEnabled ? <AssistantWidget /> : null}
           {drawer}
           {/* useSearchParams inside the palette needs a Suspense boundary. */}
           <Suspense fallback={null}>

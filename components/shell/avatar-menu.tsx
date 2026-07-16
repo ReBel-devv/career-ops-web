@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FileText, Settings, User, UserRound } from "lucide-react";
+import { FileText, Settings, Sparkles, User, UserRound } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,12 +9,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useClientConfig } from "@/components/providers/app-providers";
 
 /**
  * Avatar menu (top-right) — the route to Profile and Settings on every
  * breakpoint. Kept out of the primary nav so the mobile tab bar stays at 5.
  */
 export function AvatarMenu() {
+  const { assistantEnabled } = useClientConfig();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
@@ -24,6 +26,17 @@ export function AvatarMenu() {
         <User className="size-4.5" aria-hidden />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {assistantEnabled ? (
+          <>
+            <DropdownMenuItem asChild>
+              <Link href="/assistant">
+                <Sparkles aria-hidden />
+                Assistant
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuItem asChild>
           <Link href="/profile">
             <UserRound aria-hidden />

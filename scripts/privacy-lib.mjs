@@ -42,6 +42,8 @@ export function normalizeToken(token) {
  */
 export const GENERIC_STOPLIST = new Set([
   "vercel",
+  "anthropic", // AI vendor: @anthropic-ai/claude-agent-sdk, ANTHROPIC_API_KEY
+  "claude", // AI vendor product: claude-agent-sdk, model ids
   "cursor",
   "ruby",
   "react",

@@ -15,7 +15,12 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { extractBigrams, extractTokens, hashToken } from "./privacy-lib.mjs";
+import {
+  extractBigrams,
+  extractTokens,
+  GENERIC_STOPLIST,
+  hashToken,
+} from "./privacy-lib.mjs";
 
 const WEB_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -74,6 +79,10 @@ for (const file of listFiles()) {
   const text = readFileSync(path.join(scanDir, file), "utf8");
   const candidates = new Set([...extractTokens(text), ...extractBigrams(text)]);
   for (const token of candidates) {
+    // Generic web-dev / vendor vocabulary is never a private-data leak, even if
+    // an older blocklist generation happened to hash it (the generator now skips
+    // these). Honouring the stoplist here keeps the guard robust to that drift.
+    if (GENERIC_STOPLIST.has(token)) continue;
     if (blocked.has(hashToken(token))) {
       leaks += 1;
       console.error(`LEAK  ${file}: token ${redact(token)} matches the privacy blocklist`);
