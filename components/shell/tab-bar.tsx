@@ -78,7 +78,13 @@ export function TabBar() {
               <Ellipsis className={cn("size-5", overflowActive && "text-primary")} aria-hidden />
               <span className="text-[10px] leading-none">More</span>
             </SheetTrigger>
-            <SheetContent side="bottom">
+            <SheetContent
+              side="bottom"
+              // Darker than the default popover (matches the site's near-black
+              // background) and floated off the screen edges with a small margin
+              // on both sides and the bottom (clearing the home indicator).
+              className="inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] rounded-2xl border bg-background pb-4 text-foreground"
+            >
               <SheetHeader className="p-0">
                 <SheetTitle>More</SheetTitle>
               </SheetHeader>
