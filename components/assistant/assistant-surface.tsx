@@ -83,16 +83,42 @@ export function AssistantSurface({
   compact?: boolean;
   autoFocus?: boolean;
 }) {
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Whether the viewport is pinned to the bottom. Kept in a ref (no re-render on
+  // scroll); updated on every scroll event.
+  const atBottomRef = useRef(true);
   const streaming = status === "streaming";
   const { assistantWritable } = useClientConfig();
   const autonomous = mode === "autonomous";
 
-  // Follow the tail as tokens stream in.
-  const lastContent = messages.at(-1)?.content;
+  const scrollToBottom = () => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  };
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // A small threshold so "essentially at the bottom" still counts as pinned.
+    atBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+  };
+
+  // A new turn (the user sent, or a conversation was loaded) → jump to bottom.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [messages.length, lastContent]);
+    atBottomRef.current = true;
+    scrollToBottom();
+  }, [messages.length]);
+
+  // While a turn streams (text, tool logs, permission cards grow the last
+  // message) only follow the tail if the user is already at the bottom — so
+  // scrolling up to read earlier lines is never yanked back down.
+  const last = messages.at(-1);
+  const tailKey = last
+    ? `${last.content.length}:${last.logs.length}:${last.permissions.length}`
+    : "";
+  useEffect(() => {
+    if (atBottomRef.current) scrollToBottom();
+  }, [tailKey]);
 
   const isEmpty = messages.length === 0;
 
@@ -116,6 +142,8 @@ export function AssistantSurface({
       ) : null}
 
       <div
+        ref={scrollRef}
+        onScroll={handleScroll}
         className={cn(
           "min-h-0 flex-1 overflow-y-auto",
           compact ? "px-3 py-3" : "px-4 py-6",
@@ -131,7 +159,6 @@ export function AssistantSurface({
               ))}
             </div>
           )}
-          <div ref={bottomRef} />
         </div>
       </div>
 
