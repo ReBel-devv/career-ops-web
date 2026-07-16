@@ -26,6 +26,13 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/follow-ups", label: "Follow-ups", icon: CalendarClock },
 ];
 
+/**
+ * Hrefs shown as direct tabs in the mobile bottom bar (alongside Search + a
+ * "More" sheet holding the remaining sections). Desktop keeps the full rail, so
+ * new sections can be added freely without crowding the mobile bar.
+ */
+export const MOBILE_TAB_HREFS: readonly string[] = ["/", "/discovery"];
+
 export function isActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/" || pathname.startsWith("/app/");
   return pathname === href || pathname.startsWith(`${href}/`);
