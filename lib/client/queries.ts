@@ -270,6 +270,74 @@ export function useScanHistory() {
   });
 }
 
+/* ------------------------------------------------------- Evaluation job --- */
+
+const evaluationResultSchema = z.object({
+  url: z.string(),
+  status: z.enum(["completed", "discarded", "failed"]),
+  company: z.string().nullable(),
+  role: z.string().nullable(),
+  score: z.number().nullable(),
+  reportNum: z.string().nullable(),
+  error: z.string().nullable(),
+});
+export type EvaluationResult = z.infer<typeof evaluationResultSchema>;
+
+const evaluationJobSchema = z.object({
+  running: z.boolean(),
+  current: z.string().nullable(),
+  queued: z.array(z.string()),
+  results: z.array(evaluationResultSchema),
+  startedAt: z.string().nullable(),
+  finishedAt: z.string().nullable(),
+});
+export type EvaluationJob = z.infer<typeof evaluationJobSchema>;
+const evaluationResponse = z.object({ job: evaluationJobSchema });
+
+export const evaluationJobKey = ["evaluation-job"] as const;
+
+/**
+ * Evaluation job state (server-side, in-memory). Polls while a job runs so
+ * per-row buttons, progress and completion toasts stay live — including after
+ * a page reload mid-job.
+ */
+export function useEvaluationJob() {
+  return useQuery({
+    queryKey: evaluationJobKey,
+    queryFn: async (): Promise<EvaluationJob> => {
+      const json = await fetchJson("/api/pipeline/evaluate");
+      return evaluationResponse.parse(json).job;
+    },
+    refetchInterval: (query) => (query.state.data?.running ? 5_000 : false),
+  });
+}
+
+/** Start an evaluation job — one offer (`{url}`) or the next N (`{count}`). */
+export function useStartEvaluation() {
+  const qc = useQueryClient();
+  return useMutation<number, Error, { url: string } | { count: number }>({
+    mutationFn: async (input) => {
+      const res = await fetch("/api/pipeline/evaluate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok)
+        throw new Error(json.error ?? `Request failed (${res.status})`);
+      return z.object({ queued: z.number() }).parse(json).queued;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: evaluationJobKey });
+    },
+    onError: (error) => {
+      toast.error("Could not start the evaluation", {
+        description: error.message,
+      });
+    },
+  });
+}
+
 /* -------------------------------------------------------------- Scanner --- */
 
 const scanRunSummarySchema = z.object({

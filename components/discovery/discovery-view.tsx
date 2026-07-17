@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EvaluateNextButton, EvaluationEffects } from "./evaluate";
 import { PipelineInbox } from "./pipeline-inbox";
 import { ScanButton } from "./scan-button";
 import { ScanHistoryTable } from "./scan-history-table";
@@ -23,6 +24,8 @@ export function DiscoveryView() {
           <TabsTrigger value="scan">Scan history</TabsTrigger>
         </TabsList>
         <div className="flex items-center gap-2">
+          <EvaluationEffects />
+          <EvaluateNextButton />
           <ScanButton />
           <Button asChild size="sm" variant="secondary">
             <Link href="/discovery/add">

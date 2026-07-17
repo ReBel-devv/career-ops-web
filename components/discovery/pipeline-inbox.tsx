@@ -8,10 +8,12 @@ import { usePipelineItems } from "@/lib/client/queries";
 import { parseScoreCell } from "@/lib/domain/parse";
 import type { PipelineItem, PipelineItemKind } from "@/lib/domain";
 import { cn } from "@/lib/utils";
+import { EvaluateButton } from "./evaluate";
 
 /**
- * Pipeline inbox tab — data/pipeline.md, READ-ONLY (plan §3 Discovery: zero
- * write affordances; nothing here mutates anything).
+ * Pipeline inbox tab — data/pipeline.md. Read-only rendering, with one write
+ * affordance per pending row: "Evaluate" (the headless worker job — see
+ * components/discovery/evaluate.tsx).
  */
 export function PipelineInbox() {
   const { data, isLoading, isError, error } = usePipelineItems();
@@ -136,10 +138,15 @@ function PipelineRow({ item }: { item: PipelineItem }) {
           className="ml-auto inline-flex max-w-full items-center gap-1 truncate font-mono text-xs text-muted-foreground hover:text-foreground hover:underline sm:max-w-96"
           title={item.url}
         >
-          <span className="truncate">{item.url.replace(/^https?:\/\//, "")}</span>
+          <span className="truncate">
+            {item.url.replace(/^https?:\/\//, "")}
+          </span>
           <ExternalLink aria-hidden className="size-3 shrink-0" />
           <span className="sr-only">(opens the job posting)</span>
         </a>
+      ) : null}
+      {item.section === "pending" && item.url ? (
+        <EvaluateButton url={item.url} />
       ) : null}
     </li>
   );
