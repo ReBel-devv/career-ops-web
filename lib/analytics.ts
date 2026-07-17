@@ -392,6 +392,34 @@ export function scoreOutcomeBands(
 }
 
 /**
+ * One-line honest read of the score→reply relationship, for the card footer.
+ * Only bands with a claimable sample (n ≥ minSample) are compared, low→high;
+ * every wording states the numbers it rests on and never over-claims a trend
+ * the sample can't support.
+ */
+export function scorePredictionSummary(
+  bands: ReadonlyArray<RateDatum>,
+  minSample: number,
+): string {
+  const claimable = bands.filter((b) => b.n >= minSample);
+  if (claimable.length < 2) {
+    return `Not enough submitted, scored applications yet — need n ≥ ${minSample} in at least two bands to compare.`;
+  }
+  const lo = claimable[0];
+  const hi = claimable[claimable.length - 1];
+  if (hi.rate === 0 && lo.rate === 0) {
+    return "No scored band has advanced yet — the score isn't predicting replies so far.";
+  }
+  if (hi.rate > lo.rate) {
+    return `Higher scores advance more often: ${hi.rate}% at ${hi.label} vs ${lo.rate}% at ${lo.label}.`;
+  }
+  if (hi.rate < lo.rate) {
+    return `Higher scores aren't advancing more: ${hi.rate}% at ${hi.label} vs ${lo.rate}% at ${lo.label}.`;
+  }
+  return `Advance rate is flat across bands (${hi.rate}%) — the score isn't predicting replies yet.`;
+}
+
+/**
  * Advance rate per archetype family, from report facets + tracker statuses
  * (a combined archetype counts toward each family). Sorted by n desc so the
  * biggest bets read first; capped at 8 slots like every breakdown.

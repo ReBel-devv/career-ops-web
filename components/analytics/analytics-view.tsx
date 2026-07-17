@@ -15,6 +15,7 @@ import {
   locationBreakdownFromFacets,
   scoreHistogram,
   scoreOutcomeBands,
+  scorePredictionSummary,
   statusCounts,
   vendorBarsFromFacets,
   vendorChartData,
@@ -284,11 +285,21 @@ function AnalyticsCharts({
         <ChartCard
           title="Does the score predict replies?"
           subtitle="Advance rate per score band — submitted, scored applications only."
+          footer={
+            scoreBands.length > 0
+              ? scorePredictionSummary(scoreBands, minSample)
+              : undefined
+          }
         >
           {scoreBands.length === 0 ? (
             <ChartEmpty>No scored submission yet.</ChartEmpty>
           ) : (
-            <RateBars data={scoreBands} minSample={minSample} yAxisWidth={64} />
+            // Center the short 4-band chart in the card's height (it's row-
+            // matched to the taller Score distribution) so it doesn't sit atop
+            // a void; the footer verdict answers the card's own question.
+            <div className="flex flex-1 flex-col justify-center">
+              <RateBars data={scoreBands} minSample={minSample} yAxisWidth={64} />
+            </div>
           )}
         </ChartCard>
 

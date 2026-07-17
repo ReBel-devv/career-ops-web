@@ -33,7 +33,12 @@ export function ScoreHistogram({ bins }: { bins: HistogramBin[] }) {
           tickLine={false}
           axisLine={{ stroke: CHART.grid }}
           tick={CHART.tickMono}
-          interval="preserveStartEnd"
+          interval={0}
+          // Label each column by its lower edge only ("1.0", "1.5"…) — the full
+          // "1.0–1.5" range crowded the axis; the tooltip still carries it.
+          tickFormatter={(_value: string, index: number) =>
+            bins[index]?.from.toFixed(1) ?? ""
+          }
         />
         <YAxis
           allowDecimals={false}

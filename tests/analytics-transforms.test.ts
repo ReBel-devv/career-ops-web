@@ -11,11 +11,13 @@ import {
   pipelineAging,
   scoreHistogram,
   scoreOutcomeBands,
+  scorePredictionSummary,
   statusCounts,
   vendorBarsFromFacets,
   vendorChartData,
   weeklyActivity,
   type BreakdownDatum,
+  type RateDatum,
 } from "@/lib/analytics";
 import type {
   Application,
@@ -217,6 +219,40 @@ describe("scoreOutcomeBands", () => {
   it("returns [] when no submitted row carries a score", () => {
     expect(scoreOutcomeBands([app(1, "evaluated", 4.0)], 2)).toEqual([]);
     expect(scoreOutcomeBands([app(1, "applied", null)], 2)).toEqual([]);
+  });
+});
+
+describe("scorePredictionSummary", () => {
+  const band = (label: string, n: number, rate: number): RateDatum => ({
+    label,
+    n,
+    advanced: Math.round((rate / 100) * n),
+    rate,
+    grayed: n < 2,
+  });
+
+  it("needs two claimable bands to compare", () => {
+    const out = scorePredictionSummary(
+      [band("< 3.0", 1, 0), band("≥ 4.0", 8, 50)],
+      2,
+    );
+    expect(out).toMatch(/need n ≥ 2 in at least two bands/i);
+  });
+
+  it("calls out a rising staircase with its numbers", () => {
+    const out = scorePredictionSummary(
+      [band("3.5–3.9", 6, 20), band("≥ 4.0", 10, 60)],
+      2,
+    );
+    expect(out).toBe("Higher scores advance more often: 60% at ≥ 4.0 vs 20% at 3.5–3.9.");
+  });
+
+  it("says the score isn't predicting when every claimable band is flat at zero", () => {
+    const out = scorePredictionSummary(
+      [band("3.5–3.9", 6, 0), band("≥ 4.0", 10, 0)],
+      2,
+    );
+    expect(out).toMatch(/isn't predicting replies so far/);
   });
 });
 
