@@ -26,9 +26,13 @@ import {
 export function BreakdownBars({
   data,
   unit = "reports",
+  yAxisWidth = 64,
 }: {
   data: BreakdownDatum[];
   unit?: string;
+  /** Category label column width — keep it just wide enough for the labels so
+   * the bars sit flush left instead of behind a wide gutter. */
+  yAxisWidth?: number;
 }) {
   const reducedMotion = usePrefersReducedMotion();
 
@@ -43,7 +47,7 @@ export function BreakdownBars({
         <YAxis
           type="category"
           dataKey="label"
-          width={132}
+          width={yAxisWidth}
           axisLine={false}
           tickLine={false}
           tick={CHART.tick}
