@@ -10,6 +10,7 @@ import {
 import {
   applicationsSince,
   archetypeYield,
+  dailyActivity,
   funnelStages,
   locationBreakdownFromFacets,
   scoreHistogram,
@@ -22,14 +23,24 @@ import {
 } from "@/lib/analytics";
 import { globeCities } from "@/lib/geo";
 import type { Application, Patterns, ReportFacet } from "@/lib/domain";
-import { ActivityChart, ActivityLegend } from "./activity-chart";
+import {
+  ActivityChart,
+  ActivityLegend,
+  GRANULARITY_OPTIONS,
+  type ActivityGranularity,
+} from "./activity-chart";
 import { AgingCard } from "./aging-card";
 import { BreakdownBars } from "./breakdown-bars";
 import { ChartCard, ChartEmpty } from "./chart-card";
 import { FunnelChart } from "./funnel-chart";
 import { KpiCards } from "./kpi-cards";
 import { OfferGlobe, OfferGlobeCityList } from "./offer-globe";
-import { RangeControl, RANGE_OPTIONS, type RangeKey } from "./range-control";
+import {
+  RangeControl,
+  RANGE_OPTIONS,
+  SegmentedControl,
+  type RangeKey,
+} from "./range-control";
 import { RateBars } from "./rate-bars";
 import { RecommendationsCard } from "./recommendations-card";
 import { ScoreHistogram } from "./score-histogram";
@@ -156,7 +167,11 @@ function AnalyticsCharts({
     () => scoreHistogram(apps.map((a) => a.score)),
     [apps],
   );
-  const weeks = useMemo(() => weeklyActivity(apps), [apps]);
+  const [granularity, setGranularity] = useState<ActivityGranularity>("weekly");
+  const activity = useMemo(
+    () => (granularity === "weekly" ? weeklyActivity(apps) : dailyActivity(apps)),
+    [apps, granularity],
+  );
   const mapCities = useMemo(
     () => globeCities(apps, facets),
     [apps, facets],
@@ -210,14 +225,28 @@ function AnalyticsCharts({
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <ChartCard
           className="md:col-span-2 lg:col-span-2"
-          title="Weekly activity"
-          subtitle="Tracker rows per week — a row's date becomes its apply date once it turns Applied."
-          aside={<ActivityLegend />}
+          title="Activity"
+          subtitle={`Tracker rows per ${
+            granularity === "weekly" ? "week" : "day"
+          } — a row's date becomes its apply date once it turns Applied.`}
+          aside={
+            // Stacked on narrow screens so the toggle doesn't crush the
+            // title column; inline once the card is wide enough.
+            <div className="flex flex-col items-end gap-1.5 sm:flex-row sm:items-center sm:gap-3">
+              <ActivityLegend />
+              <SegmentedControl
+                ariaLabel="Activity granularity"
+                options={GRANULARITY_OPTIONS}
+                value={granularity}
+                onChange={setGranularity}
+              />
+            </div>
+          }
         >
-          {weeks.length === 0 ? (
+          {activity.length === 0 ? (
             <ChartEmpty>No dated applications yet.</ChartEmpty>
           ) : (
-            <ActivityChart weeks={weeks} />
+            <ActivityChart points={activity} granularity={granularity} />
           )}
         </ChartCard>
 

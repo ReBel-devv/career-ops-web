@@ -21,20 +21,26 @@ export const RANGE_OPTIONS: ReadonlyArray<{
   { key: "7d", label: "7d", days: 7 },
 ];
 
-export function RangeControl({
+/** Generic segmented control — the /analytics toggle idiom (range,
+ * activity granularity): bordered pill group, mono labels, muted active fill. */
+export function SegmentedControl<K extends string>({
+  ariaLabel,
+  options,
   value,
   onChange,
 }: {
-  value: RangeKey;
-  onChange: (key: RangeKey) => void;
+  ariaLabel: string;
+  options: ReadonlyArray<{ key: K; label: string }>;
+  value: K;
+  onChange: (key: K) => void;
 }) {
   return (
     <div
       role="group"
-      aria-label="Time range"
+      aria-label={ariaLabel}
       className="inline-flex items-center gap-0.5 rounded-md border bg-card p-0.5"
     >
-      {RANGE_OPTIONS.map((option) => {
+      {options.map((option) => {
         const active = option.key === value;
         return (
           <button
@@ -53,5 +59,22 @@ export function RangeControl({
         );
       })}
     </div>
+  );
+}
+
+export function RangeControl({
+  value,
+  onChange,
+}: {
+  value: RangeKey;
+  onChange: (key: RangeKey) => void;
+}) {
+  return (
+    <SegmentedControl
+      ariaLabel="Time range"
+      options={RANGE_OPTIONS}
+      value={value}
+      onChange={onChange}
+    />
   );
 }

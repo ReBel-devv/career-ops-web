@@ -3,6 +3,7 @@ import {
   applicationsSince,
   archetypeBreakdownFromFacets,
   archetypeYield,
+  dailyActivity,
   foldTail,
   funnelStages,
   hasNamedArchetypes,
@@ -134,7 +135,7 @@ describe("weeklyActivity", () => {
       { ...app(3, "evaluated"), date: "2026-06-17" }, // two weeks later
     ];
     const weeks = weeklyActivity(rows);
-    expect(weeks.map((w) => [w.week, w.tracked, w.applied])).toEqual([
+    expect(weeks.map((w) => [w.date, w.tracked, w.applied])).toEqual([
       ["2026-06-01", 2, 1],
       ["2026-06-08", 0, 0], // interior gap kept so the shape doesn't lie
       ["2026-06-15", 1, 0],
@@ -155,6 +156,39 @@ describe("weeklyActivity", () => {
 
   it("returns [] when nothing has a parseable date", () => {
     expect(weeklyActivity([])).toEqual([]);
+  });
+});
+
+describe("dailyActivity", () => {
+  it("buckets rows by day and gap-fills interior zero days", () => {
+    const rows = [
+      { ...app(1, "evaluated"), date: "2026-06-01" },
+      { ...app(2, "applied"), date: "2026-06-01" }, // same day
+      { ...app(3, "applied"), date: "2026-06-04" }, // 2-day interior gap
+    ];
+    const days = dailyActivity(rows);
+    expect(days.map((d) => [d.date, d.tracked, d.applied])).toEqual([
+      ["2026-06-01", 2, 1],
+      ["2026-06-02", 0, 0], // interior gap kept so the shape doesn't lie
+      ["2026-06-03", 0, 0],
+      ["2026-06-04", 1, 1],
+    ]);
+    expect(days[0].label).toBe("Jun 1");
+  });
+
+  it("counts every submitted status as applied and skips bad dates", () => {
+    const rows = [
+      { ...app(1, "rejected"), date: "2026-06-02" }, // submitted first, so counted
+      { ...app(2, "interview"), date: "2026-06-02" },
+      { ...app(3, "evaluated"), date: "not-a-date" },
+    ];
+    const days = dailyActivity(rows);
+    expect(days).toHaveLength(1);
+    expect(days[0]).toMatchObject({ date: "2026-06-02", tracked: 2, applied: 2 });
+  });
+
+  it("returns [] when nothing has a parseable date", () => {
+    expect(dailyActivity([])).toEqual([]);
   });
 });
 

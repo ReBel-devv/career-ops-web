@@ -162,18 +162,18 @@ export function scoreHistogram(
 }
 
 // ---------------------------------------------------------------------------
-// Weekly activity — tracker rows bucketed by ISO week (Monday start). The
-// tracker Date column is the evaluation date until a row turns Applied, when
-// it becomes the apply date (plan Decision 4) — so "tracked" counts every row
-// dated that week and "applied" the submitted ones.
+// Activity series — tracker rows bucketed by ISO week (Monday start) or by
+// day. The tracker Date column is the evaluation date until a row turns
+// Applied, when it becomes the apply date (plan Decision 4) — so "tracked"
+// counts every row dated in the bucket and "applied" the submitted ones.
 // ---------------------------------------------------------------------------
 
-export interface ActivityWeek {
-  /** Monday of the week, YYYY-MM-DD. */
-  week: string;
+export interface ActivityPoint {
+  /** Bucket start (the Monday for weekly, the day itself for daily), YYYY-MM-DD. */
+  date: string;
   /** Short axis label, e.g. "Jul 6". */
   label: string;
-  /** Rows dated within the week (evaluations + applications). */
+  /** Rows dated within the bucket (evaluations + applications). */
   tracked: number;
   /** Of those, rows that reached at least Applied. */
   applied: number;
@@ -193,44 +193,66 @@ function mondayOf(date: string): number | null {
   return t - ((day + 6) % 7) * MS_PER_DAY;
 }
 
+/** Midnight UTC of the date itself. */
+function dayOf(date: string): number | null {
+  const t = Date.parse(`${date}T00:00:00Z`);
+  return Number.isNaN(t) ? null : t;
+}
+
 function isoDate(t: number): string {
   return new Date(t).toISOString().slice(0, 10);
 }
 
 /**
- * Per-week tracked/applied counts, gap-filled with zero weeks between the
- * first and last active week (interior gaps kept so the shape doesn't lie).
+ * Per-bucket tracked/applied counts, gap-filled with zero buckets between the
+ * first and last active one (interior gaps kept so the shape doesn't lie).
  * Rows with unparseable dates are skipped.
  */
-export function weeklyActivity(
+function activitySeries(
   applications: ReadonlyArray<Application>,
-): ActivityWeek[] {
+  bucketOf: (date: string) => number | null,
+  stepMs: number,
+): ActivityPoint[] {
   const buckets = new Map<number, { tracked: number; applied: number }>();
   for (const app of applications) {
-    const monday = mondayOf(app.date);
-    if (monday === null) continue;
-    const bucket = buckets.get(monday) ?? { tracked: 0, applied: 0 };
+    const start = bucketOf(app.date);
+    if (start === null) continue;
+    const bucket = buckets.get(start) ?? { tracked: 0, applied: 0 };
     bucket.tracked += 1;
     if (app.statusId !== null && SUBMITTED_STATUS_IDS.has(app.statusId)) {
       bucket.applied += 1;
     }
-    buckets.set(monday, bucket);
+    buckets.set(start, bucket);
   }
   if (buckets.size === 0) return [];
 
-  const mondays = [...buckets.keys()].sort((a, b) => a - b);
-  const weeks: ActivityWeek[] = [];
-  for (let t = mondays[0]; t <= mondays[mondays.length - 1]; t += 7 * MS_PER_DAY) {
+  const starts = [...buckets.keys()].sort((a, b) => a - b);
+  const points: ActivityPoint[] = [];
+  for (let t = starts[0]; t <= starts[starts.length - 1]; t += stepMs) {
     const bucket = buckets.get(t) ?? { tracked: 0, applied: 0 };
     const d = new Date(t);
-    weeks.push({
-      week: isoDate(t),
+    points.push({
+      date: isoDate(t),
       label: `${MONTHS[d.getUTCMonth()]} ${d.getUTCDate()}`,
       tracked: bucket.tracked,
       applied: bucket.applied,
     });
   }
-  return weeks;
+  return points;
+}
+
+/** Tracked/applied per ISO week (Monday start), zero weeks gap-filled. */
+export function weeklyActivity(
+  applications: ReadonlyArray<Application>,
+): ActivityPoint[] {
+  return activitySeries(applications, mondayOf, 7 * MS_PER_DAY);
+}
+
+/** Tracked/applied per day, zero days gap-filled. */
+export function dailyActivity(
+  applications: ReadonlyArray<Application>,
+): ActivityPoint[] {
+  return activitySeries(applications, dayOf, MS_PER_DAY);
 }
 
 // ---------------------------------------------------------------------------

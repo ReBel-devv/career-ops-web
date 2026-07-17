@@ -11,25 +11,54 @@ import {
   YAxis,
 } from "recharts";
 import { usePrefersReducedMotion } from "@/lib/client/use-reduced-motion";
-import type { ActivityWeek } from "@/lib/analytics";
+import type { ActivityPoint } from "@/lib/analytics";
 import { CHART, ChartTipBody, type ChartTipProps } from "./chart-card";
 
 /**
- * Weekly pipeline activity — tracked rows (de-emphasis gray line) vs actually
- * submitted ones (foreground, soft area fill), plus a dashed reference line at
- * the mean applied/week: the cadence read (steady vs sawtooth) at a glance.
- * Monochrome by rule: series wear foreground + gray, never a hue.
+ * Pipeline activity, weekly or daily — tracked rows (de-emphasis gray line)
+ * vs actually submitted ones (foreground, soft area fill), plus a dashed
+ * reference line at the mean applied per bucket: the cadence read (steady vs
+ * sawtooth) at a glance. Monochrome by rule: series wear foreground + gray,
+ * never a hue.
  */
-export function ActivityChart({ weeks }: { weeks: ActivityWeek[] }) {
+
+export type ActivityGranularity = "weekly" | "daily";
+
+export const GRANULARITY_OPTIONS: ReadonlyArray<{
+  key: ActivityGranularity;
+  label: string;
+}> = [
+  { key: "weekly", label: "Weekly" },
+  { key: "daily", label: "Daily" },
+];
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+/** Tooltip title — "Week of Jul 6" weekly, "Mon · Jul 6" daily (the weekday
+ * makes weekend dips legible without cluttering the axis). */
+function tipTitle(point: ActivityPoint, granularity: ActivityGranularity): string {
+  if (granularity === "weekly") return `Week of ${point.label}`;
+  const day = new Date(`${point.date}T00:00:00Z`).getUTCDay();
+  return `${WEEKDAYS[day]} · ${point.label}`;
+}
+
+export function ActivityChart({
+  points,
+  granularity,
+}: {
+  points: ActivityPoint[];
+  granularity: ActivityGranularity;
+}) {
   const reducedMotion = usePrefersReducedMotion();
   const avgApplied =
-    weeks.length > 0
-      ? weeks.reduce((sum, w) => sum + w.applied, 0) / weeks.length
+    points.length > 0
+      ? points.reduce((sum, p) => sum + p.applied, 0) / points.length
       : 0;
+  const avgUnit = granularity === "weekly" ? "wk" : "d";
 
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <AreaChart data={weeks} margin={{ top: 8, right: 20, bottom: 0, left: 0 }}>
+      <AreaChart data={points} margin={{ top: 8, right: 20, bottom: 0, left: 0 }}>
         <defs>
           {/* Soft accent wash under the applied line (reference-dashboard
               idiom) — fades to transparent so the grid stays readable. */}
@@ -58,14 +87,14 @@ export function ActivityChart({ weeks }: { weeks: ActivityWeek[] }) {
           cursor={{ stroke: "var(--muted-foreground)", strokeOpacity: 0.4 }}
           isAnimationActive={false}
           content={(props: ChartTipProps) => {
-            const week = props.payload?.[0]?.payload as ActivityWeek | undefined;
-            if (!props.active || !week) return null;
+            const point = props.payload?.[0]?.payload as ActivityPoint | undefined;
+            if (!props.active || !point) return null;
             return (
               <ChartTipBody
-                title={`Week of ${week.label}`}
+                title={tipTitle(point, granularity)}
                 rows={[
-                  { value: String(week.tracked), label: "tracked" },
-                  { value: String(week.applied), label: "applied" },
+                  { value: String(point.tracked), label: "tracked" },
+                  { value: String(point.applied), label: "applied" },
                 ]}
               />
             );
@@ -78,7 +107,7 @@ export function ActivityChart({ weeks }: { weeks: ActivityWeek[] }) {
             strokeDasharray="4 4"
             strokeOpacity={0.7}
             label={{
-              value: `avg ${avgApplied.toFixed(1)}/wk`,
+              value: `avg ${avgApplied.toFixed(1)}/${avgUnit}`,
               position: "insideTopLeft",
               fill: "var(--muted-foreground)",
               fontSize: 10,
