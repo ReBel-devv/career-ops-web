@@ -59,3 +59,8 @@ next-env.d.ts
 # in-app assistant: local-only plan + stored conversations (never shared)
 /docs/ASSISTANT-PLAN.md
 /.assistant/
+
+# internal working notes — kept locally, not shared publicly
+/docs/DASHBOARD-FIXES.md
+/docs/DESIGN-REFRESH.md
+/docs/HANDOFF.md
