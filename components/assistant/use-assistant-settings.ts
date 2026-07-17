@@ -4,7 +4,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { DEFAULT_EFFORT, DEFAULT_MODEL, EFFORT_LEVELS } from "@/lib/assistant/config";
 import type { AssistantEffort, AssistantMode } from "@/lib/assistant/types";
 
-/** User-tunable assistant preferences (ASSISTANT-PLAN §1: model & effort réglables). */
+/** User-tunable assistant preferences (ASSISTANT-PLAN §1: tunable model & effort). */
 export interface AssistantSettings {
   /** Model id sent with each turn. */
   model: string;

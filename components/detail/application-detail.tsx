@@ -696,7 +696,7 @@ function FullReport({ report }: { report: Report }) {
   );
 }
 
-/** `A) Résumé du Rôle` → `Résumé du Rôle` (the letter renders as a chip). */
+/** `A) Role Summary` → `Role Summary` (the letter renders as a chip). */
 function stripLetter(title: string): string {
   return title.replace(/^[A-G](?:\s*-\s*[A-G])?\s*\)\s*/, "");
 }

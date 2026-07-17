@@ -16,8 +16,8 @@ import {
  *
  * ## Processed
  * - [x] #028 | https://… | Company | Role | 3.2/5 | PDF ❌
- * - [screened] Batch scan 2026-07-06 : ~42 offres écartées (…)
- * - [dup] https://… | Company | Role | doublon de #022
+ * - [screened] Batch scan 2026-07-06 : ~42 offers screened out (…)
+ * - [dup] https://… | Company | Role | duplicate of #022
  * - [skip] Company (Region) | Role | SKIP — reason      ← no URL
  * ```
  *
