@@ -55,10 +55,16 @@ function toastResult(result: EvaluationResult) {
 export function EvaluationEffects() {
   const qc = useQueryClient();
   const { data: job } = useEvaluationJob();
-  const seen = useRef(0);
+  const seen = useRef<number | null>(null);
 
   useEffect(() => {
     if (!job) return;
+    // First fetch after mount: a finished job only holds results that were
+    // already toasted before the reload/navigation — skip them silently. A
+    // running job re-attaches from the start.
+    if (seen.current === null) {
+      seen.current = job.running ? 0 : job.results.length;
+    }
     // A fresh job restarted the results array — reset the cursor.
     if (job.results.length < seen.current) seen.current = 0;
     for (const result of job.results.slice(seen.current)) {
