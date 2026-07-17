@@ -80,3 +80,22 @@ export {
   ProfileWriteError,
   type ProfileWriteErrorCode,
 } from "./profile-writer";
+export {
+  acquireTemplateLock,
+  templateLockDirFor,
+  templatesDirFor,
+  TemplateLockTimeoutError,
+  type TemplateLockHandle,
+  type TemplateLockOptions,
+} from "./template-lock";
+export {
+  createTemplate,
+  isValidTemplateSlug,
+  listTemplates,
+  readTemplate,
+  readTemplateVersion,
+  saveTemplate,
+  templateSlugFromTitle,
+  TemplateWriteError,
+  type TemplateWriteErrorCode,
+} from "./template-writer";

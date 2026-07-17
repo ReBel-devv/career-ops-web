@@ -21,7 +21,12 @@ import type {
   Report,
   ReportFacet,
   RescheduleFollowUpInput,
+  SaveTemplateInput,
   ScanRecord,
+  CreateTemplateInput,
+  TemplateDetail,
+  TemplateSummary,
+  TemplateVersion,
   UpdateApplicationInput,
   UpdateApplicationResult,
   UpdateOutreachContactInput,
@@ -144,4 +149,28 @@ export interface DataSource {
   readProfileDocument(
     name: string,
   ): Promise<{ bytes: Uint8Array; ext: string } | null>;
+
+  /* ----------------------------------------------------- Templates --- */
+
+  /** All message templates (current versions), newest saved first. */
+  getTemplates(): Promise<TemplateSummary[]>;
+  /** One template + its version history (newest first), null when absent. */
+  getTemplate(slug: string): Promise<TemplateDetail | null>;
+  /** One archived version's full content, null when absent. */
+  getTemplateVersion(
+    slug: string,
+    version: number,
+  ): Promise<(TemplateVersion & { body: string }) | null>;
+  /**
+   * Create a template (v1) — slug derived from the title, deduped. Throws
+   * `TemplateWriteError` (INVALID_INPUT/LOCK_TIMEOUT/PARSE_FAILED).
+   */
+  createTemplate(input: CreateTemplateInput): Promise<TemplateDetail>;
+  /**
+   * Save a new version of an existing template. Optimistic concurrency via
+   * `expectedSavedAt`. Throws `TemplateWriteError` (INVALID_INPUT/NOT_FOUND/
+   * STALE_TEMPLATE/LOCK_TIMEOUT/PARSE_FAILED). Hand edits to the current file
+   * are snapshotted into history before being overwritten.
+   */
+  saveTemplate(input: SaveTemplateInput): Promise<TemplateDetail>;
 }

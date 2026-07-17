@@ -14,6 +14,8 @@ const SCREENS: Array<{ path: string; ready: (page: Page) => Promise<void> }> = [
   { path: "/analytics", ready: async (p) => { await p.getByText(/Funnel/i).first().waitFor(); } },
   { path: "/discovery", ready: async (p) => { await p.getByText(/Pending/i).first().waitFor(); } },
   { path: "/discovery/add", ready: async (p) => { await p.getByLabel("Job posting URL").waitFor(); } },
+  { path: "/templates", ready: async (p) => { await p.getByText("LinkedIn — recruiter intro").waitFor(); } },
+  { path: "/templates/linkedin-recruiter-intro", ready: async (p) => { await p.getByLabel("Template body").waitFor(); } },
   { path: "/settings", ready: async (p) => { await p.getByText(/Demo mode/i).first().waitFor(); } },
 ];
 

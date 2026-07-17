@@ -3,6 +3,7 @@ import {
   CalendarClock,
   Inbox,
   LayoutGrid,
+  LayoutTemplate,
   Table2,
   type LucideIcon,
 } from "lucide-react";
@@ -24,6 +25,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/discovery", label: "Discovery", icon: Inbox },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/follow-ups", label: "Follow-ups", icon: CalendarClock },
+  { href: "/templates", label: "Templates", icon: LayoutTemplate },
 ];
 
 /**

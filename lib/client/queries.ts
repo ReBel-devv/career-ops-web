@@ -24,6 +24,10 @@ import {
   reportFacetSchema,
   reportSchema,
   scanRecordSchema,
+  templateAssistResultSchema,
+  templateDetailSchema,
+  templateSummarySchema,
+  templateVersionSchema,
   type Application,
   type CanonicalState,
   type Document,
@@ -44,6 +48,13 @@ import {
   type Report,
   type ReportFacet,
   type ScanRecord,
+  type CreateTemplateBody,
+  type SaveTemplateBody,
+  type TemplateAssistBody,
+  type TemplateAssistResult,
+  type TemplateDetail,
+  type TemplateSummary,
+  type TemplateVersion,
   type UpdateProfileFieldInput,
 } from "@/lib/domain";
 
@@ -797,4 +808,146 @@ export function useProfileActions() {
   });
 
   return { updateField, addDocument };
+}
+
+/* --------------------------------------------------------- Templates --- */
+
+export const templatesKey = ["templates"] as const;
+export const templateKey = (slug: string) => ["template", slug] as const;
+
+const templatesResponse = z.object({ templates: z.array(templateSummarySchema) });
+const templateVersionResponse = z.object({
+  version: templateVersionSchema.extend({ body: z.string() }),
+});
+const templateAssistResponse = z.object({ proposal: templateAssistResultSchema });
+
+/** All message templates (current versions), newest first. */
+export function useTemplates() {
+  return useQuery({
+    queryKey: templatesKey,
+    queryFn: async (): Promise<TemplateSummary[]> => {
+      const json = await fetchJson("/api/templates");
+      return templatesResponse.parse(json).templates;
+    },
+  });
+}
+
+/** One template + its version history. */
+export function useTemplate(slug: string) {
+  return useQuery({
+    queryKey: templateKey(slug),
+    queryFn: async (): Promise<TemplateDetail> => {
+      const json = await fetchJson(`/api/templates/${slug}`);
+      return templateDetailSchema.parse(json);
+    },
+  });
+}
+
+/** Lazily fetch one archived version's body (history viewer). */
+export async function fetchTemplateVersion(
+  slug: string,
+  version: number,
+): Promise<TemplateVersion & { body: string }> {
+  const json = await fetchJson(`/api/templates/${slug}/versions/${version}`);
+  return templateVersionResponse.parse(json).version;
+}
+
+/**
+ * Template mutations — create (blank or approved generation) and save (manual
+ * edit, approved agent revision, restore). Both refresh the list + detail
+ * caches with the returned detail so the UI never re-fetches after a write.
+ */
+export function useTemplateActions() {
+  const qc = useQueryClient();
+
+  const applyDetail = (detail: TemplateDetail) => {
+    qc.setQueryData(templateKey(detail.template.slug), detail);
+    void qc.invalidateQueries({ queryKey: templatesKey });
+  };
+
+  const create = useMutation<TemplateDetail, Error, CreateTemplateBody>({
+    mutationFn: async (input) => {
+      const res = await fetch("/api/templates", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+      return templateDetailSchema.parse(json);
+    },
+    onSuccess: (detail) => {
+      applyDetail(detail);
+      toast.success(`Template "${detail.template.title}" created`);
+    },
+    onError: (error) =>
+      toast.error("Couldn't create the template", { description: error.message }),
+  });
+
+  const save = useMutation<
+    TemplateDetail,
+    Error,
+    SaveTemplateBody & { slug: string }
+  >({
+    mutationFn: async ({ slug, ...input }) => {
+      const res = await fetch(`/api/templates/${slug}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const json = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        code?: string;
+      };
+      if (!res.ok) {
+        const err = new Error(json.error ?? `Request failed (${res.status})`);
+        (err as Error & { code?: string }).code = json.code;
+        throw err;
+      }
+      return templateDetailSchema.parse(json);
+    },
+    onSuccess: (detail, vars) => {
+      applyDetail(detail);
+      toast.success(
+        vars.source === "restore"
+          ? `Restored as v${detail.versions[0]?.version ?? "?"}`
+          : `Saved v${detail.versions[0]?.version ?? "?"}`,
+      );
+    },
+    onError: (error, vars) => {
+      if ((error as Error & { code?: string }).code === "STALE_TEMPLATE") {
+        toast.error("The template changed on disk", {
+          description: "Reloading the latest version — re-apply your edit.",
+        });
+        void qc.invalidateQueries({ queryKey: templateKey(vars.slug) });
+        return;
+      }
+      toast.error("Couldn't save the template", { description: error.message });
+    },
+  });
+
+  return { create, save };
+}
+
+/**
+ * AI proposal (generation or revision) — READ-ONLY server call; the result is
+ * rendered as a diff and only an explicit approval triggers create/save above.
+ */
+export function useTemplateAssist() {
+  return useMutation<TemplateAssistResult, Error, TemplateAssistBody>({
+    mutationFn: async (input) => {
+      const res = await fetch("/api/templates/assist", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+      return templateAssistResponse.parse(json).proposal;
+    },
+    onError: (error) =>
+      toast.error("The agent couldn't produce a proposal", {
+        description: error.message,
+      }),
+  });
 }

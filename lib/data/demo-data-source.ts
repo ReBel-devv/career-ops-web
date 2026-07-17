@@ -35,7 +35,13 @@ import {
   type Report,
   type ReportFacet,
   type RescheduleFollowUpInput,
+  type SaveTemplateInput,
   type ScanRecord,
+  type CreateTemplateInput,
+  type Template,
+  type TemplateDetail,
+  type TemplateSummary,
+  type TemplateVersion,
   type UpdateApplicationInput,
   type UpdateApplicationResult,
   type UpdateOutreachContactInput,
@@ -53,6 +59,8 @@ import {
   sanitizeNotes,
   setYamlScalar,
   slugFromUrl,
+  templateSlugFromTitle,
+  TemplateWriteError,
   TrackerWriteError,
 } from "@/lib/writers";
 import { parseProfile } from "@/lib/parsers/profile";
@@ -126,6 +134,75 @@ let demoProfileYaml = DEMO_PROFILE_YAML;
 
 /** Session-added source documents, prepended to the seeded demo documents. */
 const demoProfileDocs: ProfileDocument[] = [];
+
+/** In-memory templates store (session-only), seeded with two fixtures. */
+interface DemoTemplateEntry {
+  template: Template;
+  versions: Array<TemplateVersion & { body: string }>;
+}
+
+function seedDemoTemplate(entry: {
+  slug: string;
+  title: string;
+  type: string | null;
+  savedAt: string;
+  body: string;
+}): [string, DemoTemplateEntry] {
+  return [
+    entry.slug,
+    {
+      template: {
+        slug: entry.slug,
+        title: entry.title,
+        type: entry.type,
+        savedAt: entry.savedAt,
+        source: "manual",
+        note: null,
+        body: entry.body,
+      },
+      versions: [
+        {
+          version: 1,
+          savedAt: entry.savedAt,
+          source: "manual",
+          note: null,
+          body: entry.body,
+        },
+      ],
+    },
+  ];
+}
+
+const demoTemplates = new Map<string, DemoTemplateEntry>([
+  seedDemoTemplate({
+    slug: "linkedin-recruiter-intro",
+    title: "LinkedIn — recruiter intro",
+    type: "linkedin",
+    savedAt: "2026-06-20T09:00:00.000Z",
+    body: [
+      "Hi — I saw you recruit for frontend roles.",
+      "",
+      "I'm a React/TypeScript engineer focused on product polish and DX.",
+      "Would you be open to a quick chat about what your clients look for?",
+    ].join("\n"),
+  }),
+  seedDemoTemplate({
+    slug: "follow-up-email",
+    title: "Email — application follow-up",
+    type: "email",
+    savedAt: "2026-06-22T10:30:00.000Z",
+    body: [
+      "Subject: Following up on my application",
+      "",
+      "Hello,",
+      "",
+      "I applied last week and wanted to reiterate my interest.",
+      "Happy to share anything else that would help the review.",
+      "",
+      "Best regards,",
+    ].join("\n"),
+  }),
+]);
 
 const DEMO_ACTIONABLE_IDS = new Set(["applied", "responded", "interview"]);
 const APPLIED_FIRST = DEMO_CADENCE_CONFIG.applied_first;
@@ -625,6 +702,116 @@ export class DemoDataSource implements DataSource {
   /** Demo mode never serves real bytes — previews 404 gracefully. */
   async readProfileDocument(): Promise<{ bytes: Uint8Array; ext: string } | null> {
     return null;
+  }
+
+  /* ----------------------------------------------------- Templates --- */
+
+  async getTemplates(): Promise<TemplateSummary[]> {
+    return [...demoTemplates.values()]
+      .map(({ template, versions }) => {
+        const firstLine =
+          template.body
+            .split("\n")
+            .map((l) => l.trim())
+            .find((l) => l.length > 0) ?? "";
+        return {
+          slug: template.slug,
+          title: template.title,
+          type: template.type,
+          savedAt: template.savedAt,
+          versionCount: versions.length,
+          excerpt:
+            firstLine.length > 140 ? `${firstLine.slice(0, 139)}…` : firstLine,
+          body: template.body,
+        };
+      })
+      .sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+  }
+
+  async getTemplate(slug: string): Promise<TemplateDetail | null> {
+    const entry = demoTemplates.get(slug);
+    if (!entry) return null;
+    return {
+      template: { ...entry.template },
+      versions: entry.versions
+        .map(({ body: _body, ...meta }) => meta)
+        .sort((a, b) => b.version - a.version),
+    };
+  }
+
+  async getTemplateVersion(
+    slug: string,
+    version: number,
+  ): Promise<(TemplateVersion & { body: string }) | null> {
+    const entry = demoTemplates.get(slug);
+    return entry?.versions.find((v) => v.version === version) ?? null;
+  }
+
+  /** In-memory create — same slug/validation semantics as FS mode. */
+  async createTemplate(input: CreateTemplateInput): Promise<TemplateDetail> {
+    const base = templateSlugFromTitle(input.title);
+    let slug = base;
+    for (let i = 2; demoTemplates.has(slug); i += 1) slug = `${base}-${i}`;
+    const savedAt = new Date().toISOString();
+    const template: Template = {
+      slug,
+      title: input.title,
+      type: input.type ?? null,
+      savedAt,
+      source: input.source,
+      note: input.note ?? null,
+      body: input.body.trimEnd(),
+    };
+    demoTemplates.set(slug, {
+      template,
+      versions: [
+        {
+          version: 1,
+          savedAt,
+          source: input.source,
+          note: input.note ?? null,
+          body: template.body,
+        },
+      ],
+    });
+    return this.getTemplate(slug) as Promise<TemplateDetail>;
+  }
+
+  /** In-memory save — same STALE/NOT_FOUND semantics as FS mode. */
+  async saveTemplate(input: SaveTemplateInput): Promise<TemplateDetail> {
+    const entry = demoTemplates.get(input.slug);
+    if (!entry) {
+      throw new TemplateWriteError(
+        "NOT_FOUND",
+        `Template "${input.slug}" not found.`,
+      );
+    }
+    if (entry.template.savedAt !== input.expectedSavedAt) {
+      throw new TemplateWriteError(
+        "STALE_TEMPLATE",
+        "The template changed since it was loaded. Reload and retry.",
+      );
+    }
+    const savedAt = new Date().toISOString();
+    const version =
+      (entry.versions[entry.versions.length - 1]?.version ?? 0) + 1;
+    entry.template = {
+      ...entry.template,
+      title: input.title,
+      type: input.type ?? null,
+      savedAt,
+      source: input.source,
+      note: input.note ?? null,
+      body: input.body.trimEnd(),
+    };
+    entry.versions.push({
+      version,
+      savedAt,
+      source: input.source,
+      note: input.note ?? null,
+      body: entry.template.body,
+    });
+    return this.getTemplate(input.slug) as Promise<TemplateDetail>;
   }
 }
 

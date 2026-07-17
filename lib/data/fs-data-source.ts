@@ -32,7 +32,12 @@ import {
   type Report,
   type ReportFacet,
   type RescheduleFollowUpInput,
+  type SaveTemplateInput,
   type ScanRecord,
+  type CreateTemplateInput,
+  type TemplateDetail,
+  type TemplateSummary,
+  type TemplateVersion,
   type UpdateApplicationInput,
   type UpdateApplicationResult,
   type UpdateOutreachContactInput,
@@ -57,12 +62,17 @@ import {
   addOutreachContact,
   addProfileDocument,
   appendFollowUpLog,
+  createTemplate,
   deleteOutreachContact,
   FollowUpWriteError,
+  listTemplates,
   OutreachWriteError,
   parseOutreachDoc,
   PipelineWriteError,
   ProfileWriteError,
+  readTemplate,
+  readTemplateVersion,
+  saveTemplate,
   setProfileField,
   TrackerWriteError,
   updateOutreachContact,
@@ -610,6 +620,31 @@ export class FsDataSource implements DataSource {
       if (isNotFound(error)) return null;
       throw error;
     }
+  }
+
+  /* ----------------------------------------------------- Templates --- */
+
+  async getTemplates(): Promise<TemplateSummary[]> {
+    return listTemplates(this.repoPath);
+  }
+
+  async getTemplate(slug: string): Promise<TemplateDetail | null> {
+    return readTemplate(this.repoPath, slug);
+  }
+
+  async getTemplateVersion(
+    slug: string,
+    version: number,
+  ): Promise<(TemplateVersion & { body: string }) | null> {
+    return readTemplateVersion(this.repoPath, slug, version);
+  }
+
+  async createTemplate(input: CreateTemplateInput): Promise<TemplateDetail> {
+    return createTemplate(this.repoPath, input);
+  }
+
+  async saveTemplate(input: SaveTemplateInput): Promise<TemplateDetail> {
+    return saveTemplate(this.repoPath, input);
   }
 
   /**
