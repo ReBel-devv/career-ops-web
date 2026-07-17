@@ -6,7 +6,7 @@ import type { AssistantEvent, AssistantMode } from "@/lib/assistant/types";
 import { invalidationKeysForPath } from "./invalidation";
 import { conversationsKey } from "./use-conversations";
 import { useAssistantSettings } from "./use-assistant-settings";
-import type { ChatMessage, ChatStatus } from "./types";
+import type { AssistantBlock, ChatMessage, ChatStatus } from "./types";
 
 let counter = 0;
 const uid = (prefix: string): string => `${prefix}-${Date.now().toString(36)}-${counter++}`;
@@ -16,6 +16,34 @@ function deriveTitle(text: string): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
   return oneLine.length > 60 ? `${oneLine.slice(0, 60)}…` : oneLine || "New conversation";
 }
+
+/**
+ * Bring a stored message up to the ordered-block model. Conversations saved
+ * before blocks existed carry a flat `content` string + a `logs` array; we
+ * synthesize blocks from them (tools first, then the text — matching how the
+ * old UI stacked them) so history keeps rendering.
+ */
+function normalizeLoaded(m: ChatMessage & { logs?: ActionLogEntryLike[] }): ChatMessage {
+  const base = { ...m, streaming: false };
+  if (Array.isArray(m.blocks) && m.blocks.length > 0) return base;
+  if (m.role === "user") return { ...base, blocks: [] };
+  const blocks: AssistantBlock[] = [];
+  let seq = 0;
+  for (const log of m.logs ?? []) {
+    blocks.push({ kind: "tool", seq: seq++, ...log });
+  }
+  if (m.content) blocks.push({ kind: "text", seq: seq++, text: m.content, done: true });
+  return { ...base, content: "", blocks };
+}
+
+/** Shape of a legacy stored tool-log entry (pre-blocks conversations). */
+type ActionLogEntryLike = {
+  id: string;
+  name: string;
+  input?: unknown;
+  ok?: boolean;
+  summary?: string;
+};
 
 /** A user's answer to a permission card. */
 export type PermissionDecision = "approve" | "deny";
@@ -32,30 +60,98 @@ interface ApplyContext {
   qc: QueryClient;
 }
 
+/** Insert a block in `seq` order (or return the list unchanged if it exists). */
+function insertBlock(blocks: AssistantBlock[], block: AssistantBlock): AssistantBlock[] {
+  if (blocks.some((b) => b.seq === block.seq)) return blocks;
+  const next = [...blocks, block];
+  next.sort((a, b) => a.seq - b.seq);
+  return next;
+}
+
+/**
+ * Append streamed text to the text/thinking block at `seq`, creating it if the
+ * `block_start` event was missed (deltas are self-sufficient).
+ */
+function appendToBlock(
+  blocks: AssistantBlock[],
+  seq: number,
+  kind: "text" | "thinking",
+  text: string,
+): AssistantBlock[] {
+  if (!blocks.some((b) => b.seq === seq)) {
+    return insertBlock(blocks, { kind, seq, text });
+  }
+  return blocks.map((b) =>
+    b.seq === seq && (b.kind === "text" || b.kind === "thinking")
+      ? { ...b, text: b.text + text }
+      : b,
+  );
+}
+
 /** Apply one decoded SSE event to the streaming assistant message. */
 function applyEvent(event: AssistantEvent, patch: Patch, ctx: ApplyContext): void {
   switch (event.type) {
     case "session":
       ctx.sessionIdRef.current = event.sdkSessionId;
       break;
+    case "block_start":
+      patch((m) => ({
+        ...m,
+        blocks: insertBlock(m.blocks, { kind: event.blockType, seq: event.seq, text: "" }),
+      }));
+      break;
     case "text_delta":
-      patch((m) => ({ ...m, content: m.content + event.text }));
+      patch((m) => ({ ...m, blocks: appendToBlock(m.blocks, event.seq, "text", event.text) }));
+      break;
+    case "thinking_delta":
+      patch((m) => ({
+        ...m,
+        blocks: appendToBlock(m.blocks, event.seq, "thinking", event.text),
+      }));
+      break;
+    case "block_stop":
+      patch((m) => ({
+        ...m,
+        blocks: m.blocks.map((b) => (b.seq === event.seq ? { ...b, done: true } : b)),
+      }));
       break;
     case "tool_use": {
       const input = event.input as Record<string, unknown> | undefined;
       const filePath = input && typeof input.file_path === "string" ? input.file_path : undefined;
       if (filePath) ctx.toolPaths.set(event.id, filePath);
-      patch((m) => ({
-        ...m,
-        logs: [...m.logs, { id: event.id, name: event.name, input: event.input }],
-      }));
+      // A tool is emitted several times as its input streams in (empty → partial
+      // → full); upsert by seq so it appears immediately and refines in place,
+      // without losing a result that may already have arrived.
+      patch((m) => {
+        const idx = m.blocks.findIndex((b) => b.kind === "tool" && b.seq === event.seq);
+        if (idx === -1) {
+          return {
+            ...m,
+            blocks: insertBlock(m.blocks, {
+              kind: "tool",
+              seq: event.seq,
+              id: event.id,
+              name: event.name,
+              input: event.input,
+            }),
+          };
+        }
+        const blocks = m.blocks.slice();
+        const prev = blocks[idx];
+        if (prev.kind === "tool") {
+          blocks[idx] = { ...prev, name: event.name, input: event.input };
+        }
+        return { ...m, blocks };
+      });
       break;
     }
     case "tool_result":
       patch((m) => ({
         ...m,
-        logs: m.logs.map((log) =>
-          log.id === event.id ? { ...log, ok: event.ok, summary: event.summary } : log,
+        blocks: m.blocks.map((b) =>
+          b.kind === "tool" && b.id === event.id
+            ? { ...b, ok: event.ok, summary: event.summary }
+            : b,
         ),
       }));
       if (event.ok) {
@@ -79,6 +175,7 @@ function applyEvent(event: AssistantEvent, patch: Patch, ctx: ApplyContext): voi
             preview: event.preview,
             title: event.title,
             status: "pending",
+            seq: event.seq,
           },
         ],
       }));
@@ -174,7 +271,7 @@ export function useAssistantChat() {
       // Drop an empty, error-free assistant placeholder (e.g. aborted before any output).
       .filter(
         (m) =>
-          !(m.role === "assistant" && !m.content && m.logs.length === 0 && !m.error),
+          !(m.role === "assistant" && m.blocks.length === 0 && !m.error),
       )
       .map(({ streaming: _streaming, ...rest }) => rest);
     if (msgs.length === 0) return;
@@ -258,12 +355,12 @@ export function useAssistantChat() {
       const assistantId = uid("a");
       setMessages((list) => [
         ...list,
-        { id: uid("u"), role: "user", content: trimmed, logs: [], permissions: [] },
+        { id: uid("u"), role: "user", content: trimmed, blocks: [], permissions: [] },
         {
           id: assistantId,
           role: "assistant",
           content: "",
-          logs: [],
+          blocks: [],
           permissions: [],
           streaming: true,
         },
@@ -405,7 +502,7 @@ export function useAssistantChat() {
         conversation.mode === "autonomous" ? "autonomous" : "confirmation";
       modeRef.current = loadedMode;
       setModeState(loadedMode);
-      setMessages(conversation.messages.map((m) => ({ ...m, streaming: false })));
+      setMessages(conversation.messages.map(normalizeLoaded));
       setActiveId(conversation.id);
       setStatus("idle");
     } catch {

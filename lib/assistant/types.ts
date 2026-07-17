@@ -65,13 +65,29 @@ export interface AssistantPermissionRequest {
   title?: string;
   /** Short noun phrase for a compact button label. */
   displayName?: string;
+  /**
+   * `seq` of the tool block this confirmation gates, so the UI can render the
+   * card inline at the command's place in the turn — not pinned to the bottom.
+   */
+  seq?: number;
 }
 
-/** One server-sent event in the assistant stream. */
+/**
+ * One server-sent event in the assistant stream.
+ *
+ * Text, thinking and tool calls are streamed as *ordered blocks*: every block
+ * carries a monotonic `seq` (assigned by the runner in stream order) so the UI
+ * can render them interleaved exactly as the agent produced them — narration,
+ * a tool call, more narration, the final answer. `seq` also lets thinking be
+ * told apart from spoken text natively (by block kind, not by language).
+ */
 export type AssistantEvent =
   | { type: "session"; sdkSessionId: string }
-  | { type: "text_delta"; text: string }
-  | { type: "tool_use"; id: string; name: string; input: unknown }
+  | { type: "block_start"; seq: number; blockType: "text" | "thinking" }
+  | { type: "text_delta"; seq: number; text: string }
+  | { type: "thinking_delta"; seq: number; text: string }
+  | { type: "block_stop"; seq: number }
+  | { type: "tool_use"; seq: number; id: string; name: string; input: unknown }
   | { type: "tool_result"; id: string; ok: boolean; summary: string }
   | ({ type: "permission_request" } & AssistantPermissionRequest)
   | { type: "error"; message: string; code?: string; limit?: AssistantUsageLimit }

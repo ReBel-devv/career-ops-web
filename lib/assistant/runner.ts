@@ -98,6 +98,29 @@ function summarizeToolResult(content: unknown): string {
   return firstLine.length > 180 ? `${firstLine.slice(0, 180)}…` : firstLine;
 }
 
+/** Tool-input keys that name what a tool is acting on, most specific first. */
+const TARGET_KEYS = ["file_path", "path", "command", "pattern"] as const;
+
+/**
+ * Pull the first fully-quoted target value out of a tool's partially-streamed
+ * JSON input (e.g. the `file_path` of a Write before its `content` finishes), so
+ * the activity label can name what the agent is working on early. Returns
+ * undefined until a complete quoted value is available.
+ */
+function extractPartialTarget(buf: string): { key: string; value: string } | undefined {
+  for (const key of TARGET_KEYS) {
+    const match = buf.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`));
+    if (match) {
+      try {
+        return { key, value: JSON.parse(`"${match[1]}"`) as string };
+      } catch {
+        return { key, value: match[1] };
+      }
+    }
+  }
+  return undefined;
+}
+
 const WRITE_TOOL_SET: ReadonlySet<string> = new Set(WRITE_TOOLS);
 
 /**
@@ -109,6 +132,7 @@ const WRITE_TOOL_SET: ReadonlySet<string> = new Set(WRITE_TOOLS);
 function makeCanUseTool(
   opts: RunAssistantOptions,
   queue: EventQueue<AssistantEvent>,
+  seqForTool: (toolUseId: string) => number | undefined,
 ): CanUseTool {
   return async (toolName, input, options) => {
     const verdict = checkToolUse({ toolName, toolInput: input, repoRoot: opts.cwd });
@@ -132,6 +156,8 @@ function makeCanUseTool(
       preview: buildPreview(toolName, input as Record<string, unknown>),
       title: options.title,
       displayName: options.displayName,
+      // Tie the card to its tool block so the UI renders it in sequence.
+      seq: seqForTool(options.toolUseID),
     });
 
     const answer = await awaitPermission(options.requestId, options.signal);
@@ -177,6 +203,23 @@ async function driveQuery(
   let lastLimit: AssistantUsageLimit | undefined;
   let errored = false;
 
+  // Block ordering. Each content block (text / thinking / tool_use) gets a
+  // monotonic `seq` in stream order, so the UI can interleave them faithfully.
+  // Stream `index` restarts at 0 per assistant message, so we map it to a global
+  // seq for the duration of the turn.
+  let seqCounter = 0;
+  const indexToSeq = new Map<number, number>();
+  // tool_use blocks stream their input as partial JSON; we take the fully-parsed
+  // input from the batched `assistant` message instead, stamped with the seq we
+  // recorded when the block started, so it lands in the right place.
+  const toolIdToSeq = new Map<string, number>();
+  // Per stream-index bookkeeping for a tool_use block that is still streaming its
+  // input, so the UI can show "writing file X…" *while* the model generates it —
+  // not only once the whole (possibly long) input has arrived.
+  const toolMeta = new Map<number, { id: string; name: string }>();
+  const toolJson = new Map<number, string>();
+  const toolTarget = new Map<number, string>();
+
   // Emit at most one error per turn — the SDK often reports the same failure at
   // both the assistant-message and result levels (and can then throw).
   const pushError = (event: Extract<AssistantEvent, { type: "error" }>): void => {
@@ -193,6 +236,10 @@ async function driveQuery(
         cwd: opts.cwd,
         model: opts.model ?? DEFAULT_MODEL,
         effort: opts.effort ?? DEFAULT_EFFORT,
+        // Adaptive extended thinking: the model decides when (and how much) to
+        // reason. Reasoning streams as `thinking` blocks (distinct from spoken
+        // text), which the UI renders in its own collapsible card.
+        thinking: { type: "adaptive" },
         abortController: opts.abortController,
         // Reads are always auto-approved. In writable mode, mutating tools are
         // NOT listed here (that would auto-approve them) — they route through
@@ -211,7 +258,7 @@ async function driveQuery(
           ? {
               permissionMode: "default" as const,
               disallowedTools: [...DISALLOWED_TOOLS],
-              canUseTool: makeCanUseTool(opts, queue),
+              canUseTool: makeCanUseTool(opts, queue, (id) => toolIdToSeq.get(id)),
               hooks: {
                 PreToolUse: [{ hooks: [preToolUseGuard(opts)] }],
               },
@@ -234,14 +281,84 @@ async function driveQuery(
         case "stream_event": {
           const event = msg.event as {
             type?: string;
-            delta?: { type?: string; text?: string };
+            index?: number;
+            content_block?: { type?: string; id?: string; name?: string };
+            delta?: { type?: string; text?: string; thinking?: string; partial_json?: string };
           };
-          if (
-            event.type === "content_block_delta" &&
-            event.delta?.type === "text_delta" &&
-            typeof event.delta.text === "string"
-          ) {
-            queue.push({ type: "text_delta", text: event.delta.text });
+          switch (event.type) {
+            case "message_start":
+              // A new assistant message in this turn — its block indices restart
+              // at 0, but seq keeps climbing.
+              indexToSeq.clear();
+              break;
+            case "content_block_start": {
+              if (typeof event.index !== "number") break;
+              const seq = seqCounter++;
+              indexToSeq.set(event.index, seq);
+              const blockType = event.content_block?.type;
+              if (blockType === "tool_use") {
+                const id = event.content_block?.id;
+                const name = event.content_block?.name;
+                if (id) toolIdToSeq.set(id, seq);
+                if (id && name) {
+                  // Surface the tool immediately (pending, no input yet) so the
+                  // UI shows activity while its input streams. The batched
+                  // message (below) later fills the full input.
+                  toolMeta.set(event.index, { id, name });
+                  toolJson.set(event.index, "");
+                  queue.push({ type: "tool_use", seq, id, name, input: {} });
+                }
+              } else {
+                queue.push({
+                  type: "block_start",
+                  seq,
+                  blockType: blockType === "thinking" ? "thinking" : "text",
+                });
+              }
+              break;
+            }
+            case "content_block_delta": {
+              if (typeof event.index !== "number") break;
+              const seq = indexToSeq.get(event.index);
+              if (seq === undefined) break;
+              if (event.delta?.type === "text_delta" && typeof event.delta.text === "string") {
+                queue.push({ type: "text_delta", seq, text: event.delta.text });
+              } else if (
+                event.delta?.type === "thinking_delta" &&
+                typeof event.delta.thinking === "string"
+              ) {
+                queue.push({ type: "thinking_delta", seq, text: event.delta.thinking });
+              } else if (
+                event.delta?.type === "input_json_delta" &&
+                typeof event.delta.partial_json === "string"
+              ) {
+                // Accumulate the tool's streaming input and, as soon as its
+                // target (file path / command / pattern) can be read, re-emit so
+                // the activity label reads "writing X…" rather than "writing…".
+                const meta = toolMeta.get(event.index);
+                if (!meta) break;
+                const buf = (toolJson.get(event.index) ?? "") + event.delta.partial_json;
+                toolJson.set(event.index, buf);
+                const target = extractPartialTarget(buf);
+                if (target && toolTarget.get(event.index) !== target.value) {
+                  toolTarget.set(event.index, target.value);
+                  queue.push({
+                    type: "tool_use",
+                    seq,
+                    id: meta.id,
+                    name: meta.name,
+                    input: { [target.key]: target.value },
+                  });
+                }
+              }
+              break;
+            }
+            case "content_block_stop": {
+              if (typeof event.index !== "number") break;
+              const seq = indexToSeq.get(event.index);
+              if (seq !== undefined) queue.push({ type: "block_stop", seq });
+              break;
+            }
           }
           break;
         }
@@ -261,6 +378,7 @@ async function driveQuery(
               if (block && typeof block === "object" && block.type === "tool_use") {
                 queue.push({
                   type: "tool_use",
+                  seq: toolIdToSeq.get(block.id) ?? seqCounter++,
                   id: block.id,
                   name: block.name,
                   input: block.input,

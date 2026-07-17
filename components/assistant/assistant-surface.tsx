@@ -84,6 +84,7 @@ export function AssistantSurface({
   autoFocus?: boolean;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   // Whether the viewport is pinned to the bottom. Kept in a ref (no re-render on
   // scroll); updated on every scroll event.
   const atBottomRef = useRef(true);
@@ -109,16 +110,22 @@ export function AssistantSurface({
     scrollToBottom();
   }, [messages.length]);
 
-  // While a turn streams (text, tool logs, permission cards grow the last
-  // message) only follow the tail if the user is already at the bottom — so
-  // scrolling up to read earlier lines is never yanked back down.
-  const last = messages.at(-1);
-  const tailKey = last
-    ? `${last.content.length}:${last.logs.length}:${last.permissions.length}`
-    : "";
+  // While a turn streams, the last message grows in ways React re-render keys
+  // can't fully anticipate: streamed text, tool logs, and especially permission
+  // cards whose diff/command lay out to their real height a beat after mount.
+  // A ResizeObserver on the content follows *any* height change and re-pins to
+  // the bottom whenever the user is already there — so a card can never appear
+  // with only its top edge visible. Scrolling up clears `atBottomRef`, so
+  // reading earlier lines is never yanked back down.
   useEffect(() => {
-    if (atBottomRef.current) scrollToBottom();
-  }, [tailKey]);
+    const content = contentRef.current;
+    if (!content || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (atBottomRef.current) scrollToBottom();
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, []);
 
   const isEmpty = messages.length === 0;
 
@@ -149,7 +156,10 @@ export function AssistantSurface({
           compact ? "px-3 py-3" : "px-4 py-6",
         )}
       >
-        <div className={cn("mx-auto w-full", compact ? "max-w-full" : "max-w-2xl")}>
+        <div
+          ref={contentRef}
+          className={cn("mx-auto w-full", compact ? "max-w-full" : "max-w-2xl")}
+        >
           {isEmpty ? (
             <EmptyState onPick={onSend} compact={compact} />
           ) : (
