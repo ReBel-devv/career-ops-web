@@ -15,6 +15,8 @@ export interface PermissionRequestState {
   status: PermissionStatus;
   /** Scope chosen when approved ("conversation" = always-allow this session). */
   scope?: "once" | "conversation";
+  /** `seq` of the gated tool block, so the card renders in sequence, not at the end. */
+  seq?: number;
 }
 
 /** One tool call in the collapsible action journal. */
@@ -27,6 +29,17 @@ export interface ActionLogEntry {
   ok?: boolean;
   summary?: string;
 }
+
+/**
+ * One ordered block of an assistant turn. Blocks are kept in `seq` order so the
+ * transcript renders text, reasoning and tool calls interleaved exactly as the
+ * agent produced them. `done` marks a block whose stream has ended (used to stop
+ * the typewriter animation / freeze the thinking timer).
+ */
+export type AssistantBlock =
+  | { kind: "text"; seq: number; text: string; done?: boolean }
+  | { kind: "thinking"; seq: number; text: string; done?: boolean }
+  | ({ kind: "tool"; seq: number } & ActionLogEntry);
 
 /** Usage-limit detail attached to an assistant error (session vs weekly + reset). */
 export interface UsageLimitInfo {
@@ -42,10 +55,14 @@ export interface ChatError {
 export interface ChatMessage {
   id: string;
   role: ChatRole;
-  /** Markdown for assistant turns; plain text for user turns. */
+  /** Plain text for user turns; unused for assistant turns (see `blocks`). */
   content: string;
-  /** Tool-use journal (assistant turns only). */
-  logs: ActionLogEntry[];
+  /**
+   * Ordered text/thinking/tool blocks (assistant turns only). Replaces the old
+   * flat `content` string + separate `logs` array, which lost the interleaving
+   * between narration and tool calls.
+   */
+  blocks: AssistantBlock[];
   /** Pending/resolved permission cards for this turn (assistant turns only). */
   permissions: PermissionRequestState[];
   error?: ChatError;
