@@ -11,6 +11,8 @@ import {
   outreachKey,
   profileKey,
   statesKey,
+  templateKey,
+  templatesKey,
 } from "@/lib/client/queries";
 
 type Key = readonly unknown[];
@@ -39,6 +41,12 @@ export function invalidationKeysForPath(filePath: string): Key[] {
   }
   if (ends("templates/states.yml")) {
     return [statesKey, applicationsKey];
+  }
+  // Message templates: refresh the list, plus the detail view of the touched
+  // slug (current file or one of its history entries).
+  {
+    const m = /(?:^|\/)templates\/messages\/(?:history\/)?([a-z0-9][a-z0-9-]*)(?:\.md|\/)/.exec(p);
+    if (m) return [templatesKey, templateKey(m[1])];
   }
   if (p.includes("/reports/") || p.startsWith("reports/")) {
     return [["report-facets"]];
