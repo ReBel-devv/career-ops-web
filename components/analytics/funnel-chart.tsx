@@ -15,6 +15,7 @@ import {
   BarEndLabel,
   CHART,
   ChartTipBody,
+  growBar,
   type ChartTipProps,
 } from "./chart-card";
 
@@ -75,14 +76,19 @@ export function FunnelChart({ stages }: { stages: FunnelStage[] }) {
           dataKey="count"
           fill={CHART.accent}
           barSize={20}
-          radius={[0, 4, 4, 0]}
           minPointSize={2}
-          isAnimationActive={!reducedMotion}
+          isAnimationActive={false}
+          shape={growBar({
+            orientation: "horizontal",
+            radius: [0, 4, 4, 0],
+            animate: !reducedMotion,
+          })}
         >
           {/* count strong mono + conversion muted at every bar end */}
           <LabelList
             content={
               <BarEndLabel
+                animate={!reducedMotion}
                 texts={stages.map((s) => ({
                   main: String(s.count),
                   sub:

@@ -107,6 +107,66 @@
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Chart bar entrance — each bar grows from its axis (scaleX from the left for
+ * horizontal bars, scaleY from the baseline for vertical), cascaded by a small
+ * per-bar delay set inline. Distilled from a polished reference: grow-from-
+ * baseline + a subtle stagger, minus the decorative chrome. Duration/easing are
+ * the shared chart-motion tokens (mirror lib CHART.motion). Values live in CSS
+ * so the transform runs on the compositor, not the JS thread.
+ * ------------------------------------------------------------------------- */
+:root {
+  --chart-grow-dur: 460ms;
+  /* ease-out: quick to move, gentle to settle (cubic-bezier easeOutQuint-ish). */
+  --chart-grow-ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes chart-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes chart-grow-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes chart-label-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.chart-grow-bar {
+  transform-box: fill-box;
+  animation-duration: var(--chart-grow-dur);
+  animation-timing-function: var(--chart-grow-ease);
+  animation-fill-mode: both;
+}
+.chart-grow-bar[data-axis="x"] {
+  transform-origin: 0% 50%;
+  animation-name: chart-grow-x;
+}
+.chart-grow-bar[data-axis="y"] {
+  transform-origin: 50% 100%;
+  animation-name: chart-grow-y;
+}
+
+/* End-of-bar labels sit at the bar's final tip; fade them in (delayed inline to
+ * land as the bar arrives) so they don't float ahead of the growing bar. */
+.chart-label-in {
+  animation: chart-label-in var(--chart-grow-dur) ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chart-grow-bar,
+  .chart-label-in {
+    animation: none;
+  }
+}
+
 
 /* ---------------------------------------------------------------------------
  * Base theme: DARK (default). Monochrome neutral ramp; one restrained accent

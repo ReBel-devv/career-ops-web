@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Rectangle } from "recharts";
 
 /**
  * Shared chart chrome for /analytics (plan §6 + dataviz method):
@@ -32,7 +33,50 @@ export const CHART = {
   },
   /** Hover cursor wash behind bars — a ghost, never a highlight fill. */
   cursor: { fill: "var(--muted)", fillOpacity: 0.6 },
+  /** Shared entrance-motion tokens. `growMs` mirrors --chart-grow-dur in
+   * globals.css (the grow itself + its easing live in CSS); `staggerMs` is the
+   * per-bar cascade delay, kept small so long breakdowns don't turn sluggish
+   * (skill: 20–45ms/item). Used to time the bar-end label fade-in. */
+  motion: { growMs: 460, staggerMs: 45 },
 } as const;
+
+/**
+ * Custom Recharts bar shape: renders the normal rounded rectangle wrapped in a
+ * group that grows from its axis via a CSS keyframe, cascaded by `index`. Keeps
+ * every bit of Recharts' own infrastructure (geometry, Cells, tooltips,
+ * LabelList) — only the entrance is ours. Pair with `isAnimationActive={false}`
+ * on the <Bar> so Recharts' bulk animation doesn't double up.
+ *
+ * `radius` is passed per chart (Recharts doesn't forward it to custom shapes);
+ * `animate` is `!prefersReducedMotion` — false renders a plain, static bar.
+ */
+export function growBar(opts: {
+  orientation: "horizontal" | "vertical";
+  radius: number | [number, number, number, number];
+  animate: boolean;
+}) {
+  return function GrowBar(props: {
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    fill?: string;
+    index?: number;
+  }) {
+    const { x, y, width, height, fill, index = 0 } = props;
+    const rect = { x, y, width, height, fill, radius: opts.radius };
+    if (!opts.animate) return <Rectangle {...rect} />;
+    return (
+      <g
+        className="chart-grow-bar"
+        data-axis={opts.orientation === "vertical" ? "y" : "x"}
+        style={{ animationDelay: `${index * CHART.motion.staggerMs}ms` }}
+      >
+        <Rectangle {...rect} />
+      </g>
+    );
+  };
+}
 
 export function ChartCard({
   title,
@@ -117,11 +161,14 @@ export function BarEndLabel({
   texts,
   viewBox,
   index,
+  animate = false,
 }: {
   /** One entry per bar, in data order. */
   texts: ReadonlyArray<{ main: string; sub?: string; mutedMain?: boolean }>;
   viewBox?: { x?: number; y?: number; width?: number; height?: number };
   index?: number;
+  /** Fade the label in, timed to land as its bar finishes growing. */
+  animate?: boolean;
 }) {
   if (
     index === undefined ||
@@ -141,6 +188,13 @@ export function BarEndLabel({
       dominantBaseline="central"
       fontSize={11}
       fontFamily="var(--font-mono, ui-monospace)"
+      className={animate ? "chart-label-in" : undefined}
+      // Land as the bar arrives: its stagger delay + most of the grow.
+      style={
+        animate
+          ? { animationDelay: `${index * CHART.motion.staggerMs + 210}ms` }
+          : undefined
+      }
     >
       <tspan
         fill={text.mutedMain ? "var(--muted-foreground)" : "var(--foreground)"}

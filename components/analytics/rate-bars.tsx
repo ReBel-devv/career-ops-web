@@ -16,6 +16,7 @@ import {
   BarEndLabel,
   CHART,
   ChartTipBody,
+  growBar,
   type ChartTipProps,
 } from "./chart-card";
 
@@ -88,9 +89,13 @@ export function RateBars({
         <Bar
           dataKey="rate"
           barSize={20}
-          radius={[0, 4, 4, 0]}
           minPointSize={2}
-          isAnimationActive={!reducedMotion}
+          isAnimationActive={false}
+          shape={growBar({
+            orientation: "horizontal",
+            radius: [0, 4, 4, 0],
+            animate: !reducedMotion,
+          })}
         >
           {data.map((datum) => (
             <Cell
@@ -102,6 +107,7 @@ export function RateBars({
           <LabelList
             content={
               <BarEndLabel
+                animate={!reducedMotion}
                 texts={data.map((d) => ({
                   main: `${d.rate}%`,
                   sub: `n=${d.n}`,

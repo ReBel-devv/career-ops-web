@@ -15,6 +15,7 @@ import {
   BarEndLabel,
   CHART,
   ChartTipBody,
+  growBar,
   type ChartTipProps,
 } from "./chart-card";
 
@@ -67,14 +68,19 @@ export function BreakdownBars({
           dataKey="count"
           fill={CHART.accent}
           barSize={18}
-          radius={[0, 4, 4, 0]}
           minPointSize={2}
-          isAnimationActive={!reducedMotion}
+          isAnimationActive={false}
+          shape={growBar({
+            orientation: "horizontal",
+            radius: [0, 4, 4, 0],
+            animate: !reducedMotion,
+          })}
         >
           {/* count at every bar tip (bars → value at the tip) */}
           <LabelList
             content={
               <BarEndLabel
+                animate={!reducedMotion}
                 texts={data.map((d) => ({ main: String(d.count) }))}
               />
             }

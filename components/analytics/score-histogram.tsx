@@ -11,7 +11,7 @@ import {
 } from "recharts";
 import { usePrefersReducedMotion } from "@/lib/client/use-reduced-motion";
 import type { HistogramBin } from "@/lib/analytics";
-import { CHART, ChartTipBody, type ChartTipProps } from "./chart-card";
+import { CHART, ChartTipBody, growBar, type ChartTipProps } from "./chart-card";
 
 /**
  * Score distribution — one hue for one series; values live in the y-axis
@@ -65,8 +65,12 @@ export function ScoreHistogram({ bins }: { bins: HistogramBin[] }) {
           dataKey="count"
           fill={CHART.accent}
           maxBarSize={24}
-          radius={[4, 4, 0, 0]}
-          isAnimationActive={!reducedMotion}
+          isAnimationActive={false}
+          shape={growBar({
+            orientation: "vertical",
+            radius: [4, 4, 0, 0],
+            animate: !reducedMotion,
+          })}
         />
       </BarChart>
     </ResponsiveContainer>
