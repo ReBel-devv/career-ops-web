@@ -48,7 +48,7 @@ export function TabBar() {
                 aria-current={active ? "page" : undefined}
                 className={cn(CELL, active ? "text-foreground" : "text-muted-foreground")}
               >
-                <Icon className={cn("size-5", active && "text-primary")} aria-hidden />
+                <Icon className="size-5" aria-hidden />
                 <span className="text-[10px] leading-none">{item.label}</span>
               </Link>
             </li>
@@ -75,7 +75,7 @@ export function TabBar() {
               aria-label="More sections"
               className={cn(CELL, overflowActive ? "text-foreground" : "text-muted-foreground")}
             >
-              <Ellipsis className={cn("size-5", overflowActive && "text-primary")} aria-hidden />
+              <Ellipsis className="size-5" aria-hidden />
               <span className="text-[10px] leading-none">More</span>
             </SheetTrigger>
             <SheetContent
@@ -106,10 +106,7 @@ export function TabBar() {
                               : "text-muted-foreground hover:bg-muted hover:text-foreground",
                           )}
                         >
-                          <Icon
-                            className={cn("size-5 shrink-0", active && "text-primary")}
-                            aria-hidden
-                          />
+                          <Icon className="size-5 shrink-0" aria-hidden />
                           <span className="text-sm font-medium">{item.label}</span>
                         </Link>
                       </SheetClose>
