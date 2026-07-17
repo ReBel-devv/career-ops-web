@@ -33,21 +33,49 @@ const usageLimitSchema = z.object({
   resetsAt: z.number().optional(),
 });
 
+/** A legacy tool-log entry — kept so pre-blocks conversations still load and
+ * can be migrated on the client. */
+const storedLogSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  input: z.unknown().optional(),
+  ok: z.boolean().optional(),
+  summary: z.string().optional(),
+});
+
+/** An ordered assistant block (text / thinking / tool). */
+const storedBlockSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("text"),
+    seq: z.number(),
+    text: z.string(),
+    done: z.boolean().optional(),
+  }),
+  z.object({
+    kind: z.literal("thinking"),
+    seq: z.number(),
+    text: z.string(),
+    done: z.boolean().optional(),
+  }),
+  z.object({
+    kind: z.literal("tool"),
+    seq: z.number(),
+    id: z.string(),
+    name: z.string(),
+    input: z.unknown().optional(),
+    ok: z.boolean().optional(),
+    summary: z.string().optional(),
+  }),
+]);
+
 const storedMessageSchema = z.object({
   id: z.string(),
   role: z.enum(["user", "assistant"]),
-  content: z.string(),
-  logs: z
-    .array(
-      z.object({
-        id: z.string(),
-        name: z.string(),
-        input: z.unknown().optional(),
-        ok: z.boolean().optional(),
-        summary: z.string().optional(),
-      }),
-    )
-    .default([]),
+  content: z.string().default(""),
+  /** Ordered blocks (current format). Absent on pre-blocks conversations. */
+  blocks: z.array(storedBlockSchema).default([]),
+  /** Legacy flat tool journal — preserved for client-side migration. */
+  logs: z.array(storedLogSchema).optional(),
   permissions: z
     .array(
       z.object({
@@ -57,6 +85,7 @@ const storedMessageSchema = z.object({
         title: z.string().optional(),
         status: z.enum(["pending", "approved", "denied"]),
         scope: z.enum(["once", "conversation"]).optional(),
+        seq: z.number().optional(),
       }),
     )
     .default([]),
