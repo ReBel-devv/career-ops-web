@@ -67,7 +67,18 @@ export function ActivityChart({
 
   return (
     <ResponsiveContainer width="100%" height={220}>
-      <AreaChart data={points} margin={{ top: 8, right: 20, bottom: 0, left: 0 }}>
+      {/* Keyed on granularity so weekly⇄daily remounts and plays a clean
+          left→right entrance reveal. Recharts' data-change animation is an
+          index-based tween (old point n → new point n); across datasets with
+          different lengths AND x-domains (weekly Mondays vs daily dates) that
+          maps unrelated points onto each other, producing a garbage in-between
+          shape — the "curve jumps from nowhere" on daily→weekly. A remount
+          sidesteps the tween entirely and is symmetric in both directions. */}
+      <AreaChart
+        key={granularity}
+        data={points}
+        margin={{ top: 8, right: 20, bottom: 0, left: 0 }}
+      >
         <defs>
           {/* Soft accent wash under the applied line (reference-dashboard
               idiom) — fades to transparent so the grid stays readable. */}
