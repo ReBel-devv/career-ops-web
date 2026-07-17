@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { TemplatesView } from "@/components/templates/templates-view";
 
 export const metadata: Metadata = { title: "Templates" };
@@ -12,7 +13,10 @@ export default function TemplatesPage() {
           Reusable outreach texts — versioned, copy-ready, agent-editable
         </p>
       </div>
-      <TemplatesView />
+      {/* TemplatesView reads the type filter from the URL (useSearchParams). */}
+      <Suspense fallback={null}>
+        <TemplatesView />
+      </Suspense>
     </div>
   );
 }
