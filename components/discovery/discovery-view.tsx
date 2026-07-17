@@ -18,12 +18,16 @@ import { ScanHistoryTable } from "./scan-history-table";
 export function DiscoveryView() {
   return (
     <Tabs defaultValue="pipeline" className="gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <TabsList>
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <TabsList className="w-full md:w-fit">
           <TabsTrigger value="pipeline">Pipeline inbox</TabsTrigger>
           <TabsTrigger value="scan">Scan history</TabsTrigger>
         </TabsList>
-        <div className="flex items-center gap-2">
+        {/* Mobile: full-bleed row where buttons grow to fill the width (never
+            shrink — nowrap labels stay intact). flex-wrap only kicks in when
+            the labels genuinely don't fit (sub-360px), dropping a button to the
+            next line instead of overflowing the viewport. */}
+        <div className="flex flex-wrap items-center gap-2 max-md:[&>*]:grow">
           <EvaluationEffects />
           <EvaluateNextButton />
           <ScanButton />
