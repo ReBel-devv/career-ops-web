@@ -13,6 +13,7 @@ import {
   dailyActivity,
   funnelStages,
   locationBreakdownFromFacets,
+  locationCoverageSummary,
   scoreHistogram,
   scoreOutcomeBands,
   scorePredictionSummary,
@@ -319,11 +320,21 @@ function AnalyticsCharts({
         <ChartCard
           title="Locations"
           subtitle="Reports per location bucket (report facets)."
+          footer={
+            locations.length > 0
+              ? locationCoverageSummary(locations)
+              : undefined
+          }
         >
           {locations.length === 0 ? (
             <ChartEmpty>No location data yet.</ChartEmpty>
           ) : (
-            <BreakdownBars data={locations} />
+            // Center the buckets in the card's height (row-matched to the
+            // taller Archetype yield) so they don't sit atop a void; the
+            // footer reports how much of the data carries a parsed location.
+            <div className="flex flex-1 flex-col justify-center">
+              <BreakdownBars data={locations} />
+            </div>
           )}
         </ChartCard>
 

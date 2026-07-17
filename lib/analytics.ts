@@ -318,6 +318,23 @@ export function locationBreakdownFromFacets(
   return foldTail(countBy(facets.map((f) => f.locationBucket ?? "Unknown")));
 }
 
+/**
+ * One-line coverage read for the Locations card footer: how many reports
+ * resolved to a location bucket vs landed in "Unknown" (no parsed location).
+ * "" when there's nothing to summarize.
+ */
+export function locationCoverageSummary(
+  data: ReadonlyArray<BreakdownDatum>,
+): string {
+  const total = data.reduce((sum, d) => sum + d.count, 0);
+  if (total === 0) return "";
+  const unknown = data.find((d) => d.label === "Unknown")?.count ?? 0;
+  const resolved = total - unknown;
+  return `${resolved} of ${total} reports resolved to a location bucket${
+    unknown > 0 ? ` — ${unknown} unparsed` : ""
+  }.`;
+}
+
 // ---------------------------------------------------------------------------
 // Advance-rate breakdowns (score bands / archetype families) — same funnel
 // sets as lib/stats.ts (mirroring analyze-patterns), same honesty rules as the

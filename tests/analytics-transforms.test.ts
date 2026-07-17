@@ -8,6 +8,7 @@ import {
   funnelStages,
   hasNamedArchetypes,
   locationBreakdownFromFacets,
+  locationCoverageSummary,
   pipelineAging,
   scoreHistogram,
   scoreOutcomeBands,
@@ -372,6 +373,21 @@ describe("archetype / location breakdowns", () => {
     ]);
     expect(data[0]).toEqual({ label: "EU", count: 2 });
     expect(data).toContainEqual({ label: "Unknown", count: 1 });
+  });
+
+  it("summarizes location coverage, calling out the unparsed remainder", () => {
+    expect(
+      locationCoverageSummary([
+        { label: "Unknown", count: 46 },
+        { label: "Remote", count: 24 },
+        { label: "EU", count: 16 },
+      ]),
+    ).toBe("40 of 86 reports resolved to a location bucket — 46 unparsed.");
+    // No Unknown bucket → nothing to flag as unparsed.
+    expect(
+      locationCoverageSummary([{ label: "EU", count: 3 }]),
+    ).toBe("3 of 3 reports resolved to a location bucket.");
+    expect(locationCoverageSummary([])).toBe("");
   });
 
   it("folds the tail past 8 slots into Other (never a 9th hue)", () => {
