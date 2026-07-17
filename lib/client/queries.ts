@@ -69,7 +69,9 @@ import {
 export const applicationsKey = ["applications"] as const;
 export const statesKey = ["states"] as const;
 
-const applicationsResponse = z.object({ applications: z.array(applicationSchema) });
+const applicationsResponse = z.object({
+  applications: z.array(applicationSchema),
+});
 
 // The serialized CanonicalState carries the transformed keys (dashboardGroup),
 // not the raw states.yml keys — so it needs its own client schema.
@@ -85,7 +87,9 @@ const statesResponse = z.object({ states: z.array(clientStateSchema) });
 async function fetchJson(url: string): Promise<unknown> {
   const res = await fetch(url, { headers: { accept: "application/json" } });
   if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    const body = (await res.json().catch(() => null)) as {
+      error?: string;
+    } | null;
     throw new Error(body?.error ?? `Request failed (${res.status})`);
   }
   return res.json();
@@ -115,7 +119,9 @@ export function useStates() {
 
 const reportResponse = z.object({ report: reportSchema });
 const documentsResponse = z.object({ documents: z.array(documentSchema) });
-const interviewPrepResponse = z.object({ files: z.array(interviewPrepFileSchema) });
+const interviewPrepResponse = z.object({
+  files: z.array(interviewPrepFileSchema),
+});
 const followUpsResponse = z.object({ data: followUpDataSchema });
 const reportFacetsResponse = z.object({ facets: z.array(reportFacetSchema) });
 
@@ -129,7 +135,9 @@ export function useReport(num: number) {
       });
       if (res.status === 404) return null;
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null;
+        const body = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         throw new Error(body?.error ?? `Request failed (${res.status})`);
       }
       return reportResponse.parse(await res.json()).report;
@@ -241,7 +249,8 @@ export function useAddManualOffer() {
         body: JSON.stringify(input),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+      if (!res.ok)
+        throw new Error(json.error ?? `Request failed (${res.status})`);
       return addManualOfferResponse.parse(json).item;
     },
     onSuccess: () => {
@@ -261,6 +270,81 @@ export function useScanHistory() {
   });
 }
 
+/* -------------------------------------------------------------- Scanner --- */
+
+const scanRunSummarySchema = z.object({
+  timestamp: z.string(),
+  status: z.string(),
+  companies: z.number(),
+  boards: z.number(),
+  found: z.number(),
+  dupes: z.number(),
+  newAdded: z.number(),
+  errors: z.number(),
+});
+export type ScanRunSummary = z.infer<typeof scanRunSummarySchema>;
+const scanResponse = z.object({ summary: scanRunSummarySchema.nullable() });
+const scanStatusResponse = z.object({ running: z.boolean() });
+
+export const scanStatusKey = ["scan-status"] as const;
+
+/**
+ * Whether a scan is currently running server-side — lets the Discovery button
+ * re-attach to an in-flight scan after a page reload. Polls only while a scan
+ * is in progress.
+ */
+export function useScanStatus() {
+  return useQuery({
+    queryKey: scanStatusKey,
+    queryFn: async (): Promise<boolean> => {
+      const json = await fetchJson("/api/scan");
+      return scanStatusResponse.parse(json).running;
+    },
+    refetchInterval: (query) => (query.state.data === true ? 3_000 : false),
+  });
+}
+
+/**
+ * Run the zero-token portal scanner (`scan.mjs`) and refresh what it writes:
+ * the pipeline inbox and the scan history. The summary is the run's own
+ * `scan-runs.tsv` row (null when the scan wrote nothing).
+ */
+export function useRunScan() {
+  const qc = useQueryClient();
+  return useMutation<ScanRunSummary | null, Error, void>({
+    mutationFn: async () => {
+      const res = await fetch("/api/scan", { method: "POST" });
+      const json = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok)
+        throw new Error(json.error ?? `Request failed (${res.status})`);
+      return scanResponse.parse(json).summary;
+    },
+    onSuccess: (summary) => {
+      void qc.invalidateQueries({ queryKey: ["pipeline"] });
+      void qc.invalidateQueries({ queryKey: ["scan-history"] });
+      if (summary) {
+        const offers = `${summary.newAdded} new offer${summary.newAdded === 1 ? "" : "s"}`;
+        toast.success(`Scan finished — ${offers} added`, {
+          description:
+            `${summary.found} found across ${summary.companies + summary.boards} sources, ` +
+            `${summary.dupes} duplicates skipped` +
+            (summary.errors > 0
+              ? `, ${summary.errors} source error${summary.errors === 1 ? "" : "s"}`
+              : ""),
+        });
+      } else {
+        toast.success("Scan finished");
+      }
+    },
+    onError: (error) => {
+      toast.error("Scan failed", { description: error.message });
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: scanStatusKey });
+    },
+  });
+}
+
 /** Shape of the PATCH response we care about client-side (server owns the full one). */
 const patchResponseSchema = z.object({
   application: applicationSchema,
@@ -268,7 +352,9 @@ const patchResponseSchema = z.object({
   followupSeed: z
     .object({
       error: z.string().optional(),
-      result: z.object({ seeded: z.boolean(), nextDate: z.string().optional() }).optional(),
+      result: z
+        .object({ seeded: z.boolean(), nextDate: z.string().optional() })
+        .optional(),
     })
     .partial()
     .optional(),
@@ -297,9 +383,16 @@ async function patchApplication(num: number, body: PatchBody) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  const json = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+  const json = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    code?: string;
+  };
   if (!res.ok) {
-    throw new PatchError(json.error ?? `Update failed (${res.status})`, res.status, json.code);
+    throw new PatchError(
+      json.error ?? `Update failed (${res.status})`,
+      res.status,
+      json.code,
+    );
   }
   return patchResponseSchema.parse(json);
 }
@@ -361,7 +454,8 @@ export function useApplicationActions() {
       await qc.cancelQueries({ queryKey: applicationsKey });
       if (vars.kind === "status") {
         const states = qc.getQueryData<CanonicalState[]>(statesKey);
-        const target = states?.find((s) => s.id === vars.targetStatusId) ?? null;
+        const target =
+          states?.find((s) => s.id === vars.targetStatusId) ?? null;
         const previous = patchCacheRow(qc, vars.app.num, {
           statusId: target?.id ?? vars.targetStatusId,
           statusLabel: target?.label ?? null,
@@ -370,7 +464,9 @@ export function useApplicationActions() {
         });
         return { previous };
       }
-      return { previous: patchCacheRow(qc, vars.app.num, { notes: vars.notes }) };
+      return {
+        previous: patchCacheRow(qc, vars.app.num, { notes: vars.notes }),
+      };
     },
 
     onError: (error, vars, ctx) => {
@@ -379,18 +475,23 @@ export function useApplicationActions() {
       const message = error instanceof Error ? error.message : String(error);
       if (status === 409) {
         toast.error(`#${vars.app.num} changed on disk`, {
-          description: "The row was edited by another writer. Reloading the latest.",
+          description:
+            "The row was edited by another writer. Reloading the latest.",
         });
         void qc.invalidateQueries({ queryKey: applicationsKey });
       } else {
-        toast.error(`Couldn't update #${vars.app.num}`, { description: message });
+        toast.error(`Couldn't update #${vars.app.num}`, {
+          description: message,
+        });
       }
     },
 
     onSuccess: (data, vars) => {
       // Authoritative server row wins over the optimistic guess.
       qc.setQueryData<Application[]>(applicationsKey, (prev) =>
-        prev?.map((a) => (a.num === data.application.num ? data.application : a)),
+        prev?.map((a) =>
+          a.num === data.application.num ? data.application : a,
+        ),
       );
 
       if (vars.kind === "status") {
@@ -423,10 +524,14 @@ export function useApplicationActions() {
               : "Follow-up pinned",
           );
         } else if (seed?.error) {
-          toast.warning("Follow-up seeding failed", { description: seed.error });
+          toast.warning("Follow-up seeding failed", {
+            description: seed.error,
+          });
         }
       } else if (data.notesSanitized) {
-        toast.info(`Notes for #${data.application.num} saved (sanitized for the tracker)`);
+        toast.info(
+          `Notes for #${data.application.num} saved (sanitized for the tracker)`,
+        );
       } else {
         toast.success(`Notes for #${data.application.num} saved`);
       }
@@ -439,9 +544,18 @@ export function useApplicationActions() {
 
   return {
     /** Move a row to a canonical status (id). No-op when already there. */
-    moveStatus(app: Application, targetStatusId: string, opts?: { isUndo?: boolean }) {
+    moveStatus(
+      app: Application,
+      targetStatusId: string,
+      opts?: { isUndo?: boolean },
+    ) {
       if (app.statusId === targetStatusId) return;
-      mutation.mutate({ kind: "status", app, targetStatusId, isUndo: opts?.isUndo ?? false });
+      mutation.mutate({
+        kind: "status",
+        app,
+        targetStatusId,
+        isUndo: opts?.isUndo ?? false,
+      });
     },
     /** Save the Notes cell (sanitized server-side). */
     saveNotes(app: Application, notes: string) {
@@ -586,7 +700,9 @@ export function useOutreachActions() {
       contactId,
       ...body
     }: { num: number; contactId: string } & EditOutreachContactArgs) =>
-      outreachRequest(`/api/outreach/${num}/${contactId}`, "PATCH", { ...body }),
+      outreachRequest(`/api/outreach/${num}/${contactId}`, "PATCH", {
+        ...body,
+      }),
     onSuccess: (data) => {
       invalidate();
       toast.success(`Contact ${data.contact?.name ?? ""} updated`);
@@ -742,7 +858,9 @@ export function useGeneratedDocuments() {
 export const profileKey = ["profile"] as const;
 
 const updateProfileResponse = z.object({ profile: profileSchema });
-const addProfileDocumentResponse = z.object({ document: profileDocumentSchema });
+const addProfileDocumentResponse = z.object({
+  document: profileDocumentSchema,
+});
 
 /** The candidate profile aggregate (profile.yml + documents + texts). */
 export function useProfile() {
@@ -771,7 +889,8 @@ export function useProfileActions() {
         body: JSON.stringify(input),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+      if (!res.ok)
+        throw new Error(json.error ?? `Request failed (${res.status})`);
       return updateProfileResponse.parse(json).profile;
     },
     onSuccess: (profile) => {
@@ -790,14 +909,13 @@ export function useProfileActions() {
         body: form,
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+      if (!res.ok)
+        throw new Error(json.error ?? `Request failed (${res.status})`);
       return addProfileDocumentResponse.parse(json).document;
     },
     onSuccess: (document) => {
       qc.setQueryData<ProfileData>(profileKey, (prev) =>
-        prev
-          ? { ...prev, documents: [document, ...prev.documents] }
-          : prev,
+        prev ? { ...prev, documents: [document, ...prev.documents] } : prev,
       );
       toast.success(`Uploaded ${document.name}`);
     },
@@ -815,11 +933,15 @@ export function useProfileActions() {
 export const templatesKey = ["templates"] as const;
 export const templateKey = (slug: string) => ["template", slug] as const;
 
-const templatesResponse = z.object({ templates: z.array(templateSummarySchema) });
+const templatesResponse = z.object({
+  templates: z.array(templateSummarySchema),
+});
 const templateVersionResponse = z.object({
   version: templateVersionSchema.extend({ body: z.string() }),
 });
-const templateAssistResponse = z.object({ proposal: templateAssistResultSchema });
+const templateAssistResponse = z.object({
+  proposal: templateAssistResultSchema,
+});
 
 /** All message templates (current versions), newest first. */
 export function useTemplates() {
@@ -873,7 +995,8 @@ export function useTemplateActions() {
         body: JSON.stringify(input),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+      if (!res.ok)
+        throw new Error(json.error ?? `Request failed (${res.status})`);
       return templateDetailSchema.parse(json);
     },
     onSuccess: (detail) => {
@@ -881,7 +1004,9 @@ export function useTemplateActions() {
       toast.success(`Template "${detail.template.title}" created`);
     },
     onError: (error) =>
-      toast.error("Couldn't create the template", { description: error.message }),
+      toast.error("Couldn't create the template", {
+        description: error.message,
+      }),
   });
 
   const save = useMutation<
@@ -942,7 +1067,8 @@ export function useTemplateAssist() {
         body: JSON.stringify(input),
       });
       const json = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) throw new Error(json.error ?? `Request failed (${res.status})`);
+      if (!res.ok)
+        throw new Error(json.error ?? `Request failed (${res.status})`);
       return templateAssistResponse.parse(json).proposal;
     },
     onError: (error) =>
