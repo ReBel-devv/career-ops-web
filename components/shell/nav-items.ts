@@ -23,9 +23,9 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/", label: "Board", icon: LayoutGrid },
   { href: "/applications", label: "Applications", icon: Table2 },
   { href: "/discovery", label: "Discovery", icon: Inbox },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/follow-ups", label: "Follow-ups", icon: CalendarClock },
   { href: "/templates", label: "Templates", icon: LayoutTemplate },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
 ];
 
 /**

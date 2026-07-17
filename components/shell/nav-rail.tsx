@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
+import { MessageSquare, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   Tooltip,
@@ -11,6 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useClientConfig } from "@/components/providers/app-providers";
 import { isActive, NAV_ITEMS, type NavItem } from "./nav-items";
 
 /**
@@ -20,6 +21,7 @@ import { isActive, NAV_ITEMS, type NavItem } from "./nav-items";
 export function NavRail() {
   const [expanded, setExpanded] = useState(false);
   const pathname = usePathname();
+  const { assistantEnabled } = useClientConfig();
 
   return (
     <nav
@@ -56,6 +58,13 @@ export function NavRail() {
       </ul>
 
       <div className="flex flex-col gap-1 border-t p-2">
+        {assistantEnabled ? (
+          <RailLink
+            item={{ href: "/assistant", label: "Assistant", icon: MessageSquare }}
+            active={isActive(pathname, "/assistant")}
+            expanded={expanded}
+          />
+        ) : null}
         <RailLink
           item={{ href: "/settings", label: "Settings", icon: Settings }}
           active={isActive(pathname, "/settings")}
