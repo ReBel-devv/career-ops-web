@@ -12,7 +12,7 @@
 ![Tests](https://img.shields.io/badge/tests-223%20unit%20%2B%2047%20e2e-brightgreen)
 ![a11y](https://img.shields.io/badge/WCAG-AA-success)
 
-**🔗 Live demo:** _add your Vercel URL here_ · **📦 Companion CLI:** [career-ops](https://github.com/santifer/career-ops)
+**🔗 Live demo:** <https://career-ops-web-plum.vercel.app/> · **📦 Companion CLI:** [career-ops](https://github.com/santifer/career-ops)
 
 <!-- Add 2–3 screenshots or a short GIF here — the board, a report, the analytics view.
      Drop images in docs/screenshots/ and reference them:
