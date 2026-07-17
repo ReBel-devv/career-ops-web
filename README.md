@@ -1,14 +1,48 @@
 # career-ops-web
 
-A premium web dashboard for the [career-ops](https://github.com/santifer/career-ops)
-AI job-search pipeline: Kanban board over your application tracker, evaluation
-report viewer, follow-up calendar, analytics, discovery inbox, and LinkedIn
-outreach tracking — all reading and writing the same plain files the career-ops
-CLI uses, through the same code paths.
+> A premium web dashboard for the [career-ops](https://github.com/santifer/career-ops)
+> AI job-search pipeline — a Kanban board, evaluation-report viewer, follow-up
+> calendar, analytics, discovery inbox, and LinkedIn outreach tracker that read
+> and write the **same plain files the CLI uses, through the same code paths**.
 
-Built with Next.js (App Router), TypeScript strict, Tailwind v4, shadcn/ui,
-dnd-kit, TanStack Query, and Recharts. Dark theme by default, WCAG AA in both
-themes, fully keyboard-operable (including drag and drop).
+![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs)
+![React](https://img.shields.io/badge/React-19-149eca?logo=react)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6?logo=typescript)
+![Tailwind](https://img.shields.io/badge/Tailwind-v4-38bdf8?logo=tailwindcss)
+![Tests](https://img.shields.io/badge/tests-223%20unit%20%2B%2047%20e2e-brightgreen)
+![a11y](https://img.shields.io/badge/WCAG-AA-success)
+
+**🔗 Live demo:** _add your Vercel URL here_ · **📦 Companion CLI:** [career-ops](https://github.com/santifer/career-ops)
+
+<!-- Add 2–3 screenshots or a short GIF here — the board, a report, the analytics view.
+     Drop images in docs/screenshots/ and reference them:
+     ![Board](docs/screenshots/board.png) -->
+
+---
+
+## Highlights
+
+- **Privacy by construction, not by discipline.** A build-time gate makes it
+  *impossible* to deploy real data; a hashed-blocklist CI guard catches any
+  verbatim leak in committed files. The public demo runs on entirely fictional
+  fixtures — no real data exists in the repo. ([details](#privacy-model))
+- **The demo runs the real code.** The 8 fictional evaluation reports are parsed
+  by the *actual* production parser and analytics is *derived* from fixtures at
+  request time — zero hand-written numbers, so the demo can never drift from the
+  real app's behaviour.
+- **Embedded AI agent with hard guardrails.** A conversational assistant (Claude
+  Agent SDK) operates on your repo with confirmed, diff-previewed mutations and
+  guardrails that refuse `git push`, `rm -rf`, `sudo` and out-of-repo writes
+  even in autonomous mode. ([details](#embedded-assistant-local-only))
+- **Safety-first write-back.** Every edit is a single locked, backed-up,
+  atomically-renamed, verify-gated cell write — golden-file tests assert the
+  tracker is byte-identical except the one changed cell.
+- **Accessible & polished.** Dark theme by default, WCAG AA in both themes,
+  fully keyboard-operable including drag-and-drop, axe-core-scanned on every
+  screen.
+
+Built with **Next.js 16 (App Router)**, **React 19**, **TypeScript strict**,
+**Tailwind v4**, **shadcn/ui**, **dnd-kit**, **TanStack Query**, and **Recharts**.
 
 ## Two ways to run it
 
