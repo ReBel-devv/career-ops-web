@@ -34,6 +34,15 @@ export const GRANULARITY_OPTIONS: ReadonlyArray<{
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
+/**
+ * Recharts re-animates the whole area path from scratch on every data change
+ * (weekly⇄daily toggle, range filter) — its 1500ms/"ease" default reads as a
+ * slow crawl. Override to a snappy micro-interaction (skill: 150–300ms,
+ * ease-out) so the switch feels reactive: quick to move, gentle to settle.
+ */
+const ANIM_MS = 260;
+const ANIM_EASING = "ease-out" as const;
+
 /** Tooltip title — "Week of Jul 6" weekly, "Mon · Jul 6" daily (the weekday
  * makes weekend dips legible without cluttering the axis). */
 function tipTitle(point: ActivityPoint, granularity: ActivityGranularity): string {
@@ -124,6 +133,8 @@ export function ActivityChart({
           dot={false}
           activeDot={{ r: 3, fill: CHART.grayed, strokeWidth: 0 }}
           isAnimationActive={!reducedMotion}
+          animationDuration={ANIM_MS}
+          animationEasing={ANIM_EASING}
         />
         <Area
           type="monotone"
@@ -134,6 +145,8 @@ export function ActivityChart({
           dot={false}
           activeDot={{ r: 3, fill: CHART.accent, strokeWidth: 0 }}
           isAnimationActive={!reducedMotion}
+          animationDuration={ANIM_MS}
+          animationEasing={ANIM_EASING}
         />
       </AreaChart>
     </ResponsiveContainer>
