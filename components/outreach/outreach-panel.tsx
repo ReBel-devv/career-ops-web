@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, Pencil, Plus, Trash2, UserRound } from "lucide-react";
+import {
+  Check,
+  Circle,
+  ExternalLink,
+  Pencil,
+  Plus,
+  Trash2,
+  UserRound,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -238,67 +246,82 @@ function StageStepper({
       {OUTREACH_STAGES.map((stage, i) => {
         const date = contact.stageDates[stage];
         const isCurrent = stage === contact.stage;
-        const reached = date !== undefined;
+        const isDone = i < currentIdx;
         return (
-          <li key={stage} className="flex min-w-0 flex-1 flex-col items-stretch">
-            <div className="flex items-center">
+          <li
+            key={stage}
+            className="relative flex min-w-0 flex-1 flex-col items-stretch"
+          >
+            {/* Connectors are pinned to the dot's vertical center (button pt-2
+                8px + half the size-4 dot 8px = 16px = top-4) so the track lines
+                up with the dots. The calc() inset (dot radius 8px + 6px gap)
+                stops the track short of each dot so it never touches them. */}
+            {i > 0 ? (
               <span
                 aria-hidden
                 className={cn(
-                  "h-px flex-1",
-                  i === 0 ? "bg-transparent" : i <= currentIdx ? "bg-primary/50" : "bg-border",
+                  "absolute top-4 left-0 right-[calc(50%+0.875rem)] h-0.5 -translate-y-1/2 rounded-full transition-colors duration-200",
+                  isDone || isCurrent ? "bg-foreground" : "bg-muted",
                 )}
               />
-              <button
-                type="button"
-                disabled={disabled}
-                aria-current={isCurrent ? "step" : undefined}
-                aria-label={
-                  isCurrent
-                    ? `${STAGE_LABELS[stage]} (current stage)`
-                    : `Set stage to ${STAGE_LABELS[stage]}`
-                }
-                title={date ? `${STAGE_LABELS[stage]} — ${date}` : STAGE_LABELS[stage]}
-                onClick={() => onSetStage(stage)}
+            ) : null}
+            {i < OUTREACH_STAGES.length - 1 ? (
+              <span
+                aria-hidden
                 className={cn(
-                  "flex min-h-11 min-w-11 flex-col items-center justify-center gap-1 rounded-md px-1",
-                  "focus-visible:outline-2 focus-visible:outline-ring",
-                  !disabled && "hover:bg-accent/60",
-                  disabled && "cursor-default",
+                  "absolute top-4 left-[calc(50%+0.875rem)] right-0 h-0.5 -translate-y-1/2 rounded-full transition-colors duration-200",
+                  isDone ? "bg-foreground" : "bg-muted",
+                )}
+              />
+            ) : null}
+            <button
+              type="button"
+              disabled={disabled}
+              aria-current={isCurrent ? "step" : undefined}
+              aria-label={
+                isCurrent
+                  ? `${STAGE_LABELS[stage]} (current stage)`
+                  : `Set stage to ${STAGE_LABELS[stage]}`
+              }
+              title={date ? `${STAGE_LABELS[stage]} — ${date}` : STAGE_LABELS[stage]}
+              onClick={() => onSetStage(stage)}
+              className={cn(
+                "group/step relative z-10 flex min-h-11 min-w-11 flex-col items-center gap-1.5 rounded-md px-1 pt-2",
+                "focus-visible:outline-2 focus-visible:outline-ring",
+                !disabled && "cursor-pointer",
+                disabled && "cursor-default",
+              )}
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  "flex size-4 items-center justify-center rounded-full border transition-[transform,color,background-color,border-color,box-shadow] duration-200 motion-safe:group-hover/step:scale-110",
+                  isDone
+                    ? "border-foreground bg-foreground text-background"
+                    : isCurrent
+                      ? "border-foreground bg-background text-foreground ring-2 ring-foreground/25"
+                      : "border-muted-foreground/40 bg-background text-transparent group-hover/step:border-foreground/70",
                 )}
               >
-                <span
-                  aria-hidden
-                  className={cn(
-                    "size-2.5 rounded-full border",
-                    isCurrent
-                      ? "border-primary bg-primary ring-2 ring-primary/30"
-                      : reached
-                        ? "border-primary/60 bg-primary/60"
-                        : "border-muted-foreground/40 bg-transparent",
-                  )}
-                />
-                <span
-                  className={cn(
-                    "text-[10px] leading-none",
-                    isCurrent ? "font-medium text-foreground" : "text-muted-foreground",
-                  )}
-                >
-                  {STAGE_LABELS[stage]}
-                </span>
-              </button>
+                {isDone ? (
+                  <Check className="size-2.5" strokeWidth={3} />
+                ) : isCurrent ? (
+                  <Circle className="size-2 fill-current" />
+                ) : null}
+              </span>
               <span
-                aria-hidden
                 className={cn(
-                  "h-px flex-1",
-                  i === OUTREACH_STAGES.length - 1
-                    ? "bg-transparent"
-                    : i < currentIdx
-                      ? "bg-primary/50"
-                      : "bg-border",
+                  "text-[10px] leading-none transition-colors duration-200",
+                  isCurrent
+                    ? "font-medium text-foreground"
+                    : isDone
+                      ? "text-foreground"
+                      : "text-muted-foreground group-hover/step:text-foreground",
                 )}
-              />
-            </div>
+              >
+                {STAGE_LABELS[stage]}
+              </span>
+            </button>
             <span
               className={cn(
                 "mt-0.5 text-center font-mono text-[10px] tabular-nums",
