@@ -225,22 +225,21 @@ function MachineSummaryPanel({ summary }: { summary: MachineSummary | null }) {
   return (
     <Section title="Machine summary">
       <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {summary.final_decision ? (
-            <Badge
-              variant="default"
-              className="h-auto max-w-full whitespace-normal text-left"
-            >
-              {summary.final_decision}
-            </Badge>
-          ) : null}
-          {summary.risk_level ? (
-            <Badge variant="outline">Risk: {summary.risk_level}</Badge>
-          ) : null}
-          {summary.confidence ? (
-            <Badge variant="outline">Confidence: {summary.confidence}</Badge>
-          ) : null}
-        </div>
+        {summary.final_decision ? (
+          <p className="rounded-lg border border-primary/30 bg-primary/[0.06] px-3.5 py-2.5 text-sm leading-relaxed text-foreground dark:bg-primary/10">
+            {summary.final_decision}
+          </p>
+        ) : null}
+        {summary.risk_level || summary.confidence ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {summary.risk_level ? (
+              <Badge variant="outline">Risk: {summary.risk_level}</Badge>
+            ) : null}
+            {summary.confidence ? (
+              <Badge variant="outline">Confidence: {summary.confidence}</Badge>
+            ) : null}
+          </div>
+        ) : null}
 
         {summary.top_strengths.length > 0 ? (
           <ChipList
@@ -483,9 +482,9 @@ function Timeline({
           />
         ))}
         {pin ? (
-          <li className="flex items-baseline gap-2">
+          <li className="flex gap-2">
             <CalendarClock
-              className="size-3.5 shrink-0 translate-y-0.5 text-primary"
+              className="mt-[0.1875rem] size-3.5 shrink-0 text-primary"
               aria-hidden
             />
             <span className="font-mono tabular-nums text-muted-foreground">
@@ -512,9 +511,9 @@ function TimelineRow({
   note?: string;
 }) {
   return (
-    <li className="flex items-baseline gap-2">
+    <li className="flex gap-2">
       <span
-        className="size-1.5 shrink-0 translate-y-1.5 rounded-full bg-muted-foreground/50"
+        className="mt-[0.4375rem] size-1.5 shrink-0 rounded-full bg-muted-foreground/50"
         aria-hidden
       />
       <span className="font-mono tabular-nums text-muted-foreground">{date}</span>
